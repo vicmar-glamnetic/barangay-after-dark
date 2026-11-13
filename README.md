@@ -1,0 +1,111 @@
+# Barangay After Dark
+
+A first-person 3D browser game set in a Filipino barangay at night. Walk around, find the kids playing Laro ng Lahi, and join their games to earn **Tropa Points**.
+
+Runs on iPhone/Android browsers and on Mac (Safari + Chrome). Built with Vite, TypeScript, Three.js and Rapier physics. There is no backend, and every model, texture and sound is generated in code.
+
+## Run it
+
+```bash
+npm install
+npm run dev        # http://localhost:5173 (also printed: a LAN URL for your phone)
+```
+
+To test on a real phone, connect it to the same Wi-Fi and open the **Network** URL that Vite prints.
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Dev server with hot reload, exposed on your LAN |
+| `npm run build` | Typecheck + production build into `dist/` |
+| `npm run preview` | Serve the built `dist/` locally (service worker active) |
+| `npm run typecheck` | TypeScript only |
+| `npm run icons` | Regenerate the PWA icons in `public/icons/` |
+
+### Debug URL flags
+
+- `?touch=1` forces the touch HUD (use it with Chrome DevTools device mode). `?touch=0` forces mouse/keyboard.
+- `?fps=1` shows FPS, draw calls and triangle count.
+- `?q=low` or `?q=high` forces a quality preset for that session.
+
+## Controls
+
+| | Desktop (Mac) | Phone |
+| --- | --- | --- |
+| Move | WASD / arrows | Left-side joystick (push all the way to run) |
+| Run | Shift | Joystick at full tilt |
+| Look | Mouse (Pointer Lock) | Drag on the right half |
+| Jump | Space | **Talon** |
+| Throw / kick | Left click (hold to aim) | **Bato** / **Sipa** (hold to aim) |
+| Interact | E | **Laro!** |
+| Pause | Esc | Pause button (top right) |
+
+Settings (in the pause menu) include look sensitivity, invert Y, Low/High quality and volume. They are saved.
+
+## Games
+
+1. **Tumbang Preso** (done): throw your tsinelas at the can from behind the line. If it falls, grab your slipper and get back behind the line before the taya sets the can up and tags you. 3 rounds.
+2. **Sipa** (done): kick the sipa when it drops into the ring. Every kick gets faster. Score = streak.
+3. **Patintero**, 4. **Taguan**, 5. **Langit-Lupa**: the kids and "Soon!" labels are in the hub, and each module has its planned design written in its header comment.
+
+Games unlock in order. Progress, best scores and Tropa Points are saved in `localStorage`.
+
+## Project structure
+
+```
+src/
+  main.ts               App: boot, state machine (title / play / pause), frame loop
+  core/                 renderer, loop, input, audio, save, physics, device detection
+  world/                barangay map, props, lighting bake, sky, NPC kids, blob shadows, textures
+  player/               first-person controller, view-model hand/leg, tsinelas model
+  ui/                   HUD, menus, mobile controls, overlays, styles
+  games/                gameManager + one module per street game
+public/                 manifest, service worker, icons
+scripts/make-icons.mjs  dependency-free PNG icon generator
+```
+
+### Adding a new street game
+
+1. Create `src/games/myGame.ts` extending `BaseGame` (see `games/baseGame.ts`).
+2. Set `id`, `name`, `where`, `implemented`, and a `layout` (interact spot, label position, kid placements).
+3. Implement `start()`, `update(dt)`, `stop()` (and `postPhysics()` if you use Rapier bodies). Call `this.ctx.finish(result)` when the game ends.
+4. Add it to the `games` array in `games/gameManager.ts`. The array order is the unlock order.
+
+## Performance notes
+
+- **Baked lighting:** every lamp and window light is baked into vertex colors at load time. The whole static world is one merged mesh drawn with `MeshBasicMaterial`, so it costs almost nothing per pixel.
+- **Dynamic lighting:** moving objects use Lambert materials lit by a hemisphere light plus a pool of 3 point lights that follow the nearest lamps.
+- **Instancing:** electric posts/lamps and perimeter fences are `InstancedMesh`es. Roofs are merged into the static mesh instead, so they still get baked light.
+- **Shadows:** there are no shadow maps. All blob shadows are drawn from one instanced mesh.
+- **Budget:** about 40 to 46k triangles and roughly 60 to 130 draw calls, depending on the view. DPR is capped at 1.5 on mobile (High) or 1.0 (Low).
+- **Physics:** Rapier runs at a variable timestep clamped between 1/240 and 1/30 s.
+
+## Deploy
+
+The build is a static site in `dist/`. `vite.config.ts` uses `base: './'`, so the same build works at a domain root or in a subfolder.
+
+**Vercel:** import the repo. Framework preset: Vite. Build command `npm run build`, output directory `dist`.
+
+**Netlify:** build command `npm run build`, publish directory `dist`.
+Or drag and drop the `dist/` folder into the Netlify dashboard.
+
+**GitHub Pages:**
+
+```bash
+npm run build
+npx gh-pages -d dist    # publishes dist/ to the gh-pages branch
+```
+
+Then set Pages to serve from the `gh-pages` branch. You can also use a GitHub Actions workflow that runs `npm ci && npm run build` and uploads `dist/` with `actions/upload-pages-artifact`.
+
+### Add to Home Screen (fullscreen)
+
+- **iPhone (Safari):** Share, then Add to Home Screen. iOS Safari cannot go fullscreen inside a normal tab, so launching from the home screen icon is how you get fullscreen.
+- **Android (Chrome):** menu, then Install app / Add to Home screen. In a normal tab the game also asks for fullscreen + landscape when you tap start.
+
+After the first visit, the service worker caches the game so it works offline.
+
+## Notes
+
+- Audio starts only after the first tap/click, as iOS requires. On iPhone the hardware silent switch also mutes Web Audio.
+- The UI font is Baloo 2 from Google Fonts, which is free. If the font cannot load, a system font is used.
+- There are no paid assets or services.
