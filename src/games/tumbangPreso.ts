@@ -19,6 +19,12 @@ import type { HubLayout } from './types';
  * 3 rounds. Knockdown +10 (once per player per round), safe return +5,
  * return while the can is still down +5 bonus.
  *
+ * MULTIPLAYER (2+ players): one PLAYER is the taya instead of the AI kid.
+ * The taya cannot cross the throw line. When the can falls they walk to it
+ * (picks it up), carry it back into the circle (it stands up by itself), and
+ * while the can stands they tag anyone past the line just by touching them.
+ * Whoever gets tagged is the taya next round. Taya: +10 per tag, +2 per reset.
+ *
  * Network: the host owns the can, every slipper and the taya (physics + AI)
  * and broadcasts a snapshot at 15 Hz. Clients only send 'throw'.
  */
@@ -39,8 +45,8 @@ const TAG_DIST = 0.9;
 const GRAVITY = 9.81;
 const SNAP_HZ = 15;
 
-type PPhase = 'throw' | 'out' | 'return' | 'safe' | 'tagged' | 'missed';
-const PHASES: PPhase[] = ['throw', 'out', 'return', 'safe', 'tagged', 'missed'];
+type PPhase = 'throw' | 'out' | 'return' | 'safe' | 'tagged' | 'missed' | 'taya';
+const PHASES: PPhase[] = ['throw', 'out', 'return', 'safe', 'tagged', 'missed', 'taya'];
 type TayaState = 'guard' | 'fetch' | 'carry' | 'setting' | 'chase';
 const TAYA_MODES: KidMode[] = ['idle', 'run', 'carry', 'crouch', 'cheer'];
 
@@ -57,6 +63,10 @@ interface Part {
   knockedRound: boolean;
   wentOut: boolean;
   landed: boolean;
+  // as the human taya (multiplayer)
+  tayaRounds: number;
+  tagsMade: number;
+  resets: number;
 }
 
 const _v = new THREE.Vector3();
@@ -93,6 +103,11 @@ export class TumbangPreso extends BaseGame {
   // ---- client view state (everyone, filled from snapshots)
   private running = false;
   private myPhase: PPhase = 'throw';
+  /** Multiplayer: who is the human taya this round (null = AI kid). */
+  private tayaId: string | null = null;
+  /** 0 can up, 1 can down, 2 being carried by the taya. */
+  private canState = 0;
+  private tayaWarnT = 0;
   private myHolding = false;
   private myScore = 0;
   private round = 0;
@@ -119,6 +134,9 @@ export class TumbangPreso extends BaseGame {
   private settingT = 0;
   private snapT = 0;
   private lastToucher: string | null = null;
+  private humanTaya = false;
+  private carrying = false;
+  private nextTaya: string | null = null;
 
   protected onAttach(): void {
     const { scene, blobs } = this.ctx;
@@ -166,6 +184,8 @@ export class TumbangPreso extends BaseGame {
     });
     this.running = true;
     this.myPhase = 'throw';
+    this.tayaId = null;
+    this.canState = 0;
     this.myHolding = false;
     this.myScore = 0;
     this.round = 0;
@@ -185,6 +205,13 @@ export class TumbangPreso extends BaseGame {
       this.parts.clear();
       for (const id of this.roster()) this.parts.set(id, newPart(id));
       this.round = 0;
+      // Multiplayer with 2+ players: a player is the taya (rotates by tags).
+      const roster = this.roster();
+      this.humanTaya = this.multiplayer && roster.length >= 2;
+      const wanted = this.opts.taya as string | undefined;
+      this.nextTaya = this.humanTaya ? (wanted && roster.includes(wanted) ? wanted : roster[this.seed % roster.length]) : null;
+      this.tayaId = null;
+      this.carrying = false;
       this.hostBeginRound();
     }
   }
@@ -316,7 +343,22 @@ export class TumbangPreso extends BaseGame {
       safe: this.multiplayer ? 'Ligtas ka! Hintayin ang iba.' : 'Ligtas ka!',
       tagged: 'Na-taya ka. Hintayin ang susunod na round.',
       missed: 'Hintayin ang susunod na round.',
+      taya:
+        this.canState === 1
+          ? 'Natumba ang lata! Puntahan mo para kunin.'
+          : this.canState === 2
+            ? 'Ibalik ang lata sa bilog!'
+            : 'Ikaw ang TAYA! Habang nakatayo ang lata, tayain ang lumampas sa linya.',
     };
+    // the taya may not cross the throw line
+    if (this.myPhase === 'taya' && player.position.x > LINE_X - 0.25) {
+      player.teleport(LINE_X - 0.3, player.position.y, player.position.z, player.yaw, player.pitch);
+      this.tayaWarnT -= dt;
+      if (this.tayaWarnT <= 0) {
+        hud.toast('Bawal lumampas sa linya ang taya!', 'bad', 900);
+        this.tayaWarnT = 1.5;
+      }
+    }
     hud.setObjective(this.round ? obj[this.myPhase] : 'Handa na...');
     let stat = `Round ${Math.max(1, this.round)}/${ROUNDS}   Puntos: ${this.myScore}`;
     if (this.multiplayer && this.board.length > 1) stat += '   ' + this.board.slice(0, 4).map(([id, s]) => `${this.nameOf(id)} ${s}`).join(' · ');
@@ -382,11 +424,28 @@ export class TumbangPreso extends BaseGame {
     switch (d.k) {
       case 'round': {
         this.round = Number(d.n);
-        const slot = this.slotOf(this.selfId);
-        this.ctx.player.teleport(START_X, 0, SLOT_Z[slot % SLOT_Z.length], Math.PI / 2, -0.06);
-        this.ctx.hud.toast(`Round ${this.round}`, 'small', 1000);
-        this.myPhase = 'throw';
-        this.myHolding = true;
+        this.tayaId = (d.t as string | null) ?? null;
+        this.canState = 0;
+        // a human taya replaces the AI kid
+        this.taya.root.visible = !this.tayaId;
+        const { player, hud, touch } = this.ctx;
+        if (this.tayaId === this.selfId) {
+          player.teleport(GUARD.x + 1.5, 0, GUARD.z - 1.4, -Math.PI / 2, -0.1);
+          this.myPhase = 'taya';
+          this.myHolding = false;
+          this.ctx.hand.setHolding(false);
+          touch.setActionLabel('Taya');
+          hud.toast(`Round ${this.round}: Ikaw ang TAYA!`, 'bad', 1600);
+        } else {
+          // thrower slots skip the taya so everyone stays spread out
+          const throwers = this.roster().filter((id) => id !== this.tayaId);
+          const slot = Math.max(0, throwers.indexOf(this.selfId));
+          player.teleport(START_X, 0, SLOT_Z[slot % SLOT_Z.length], Math.PI / 2, -0.06);
+          this.myPhase = 'throw';
+          this.myHolding = true;
+          touch.setActionLabel('Bato');
+          hud.toast(this.tayaId ? `Round ${this.round}: si ${this.nameOf(this.tayaId)} ang taya` : `Round ${this.round}`, 'small', 1400);
+        }
         break;
       }
       case 's': {
@@ -400,6 +459,7 @@ export class TumbangPreso extends BaseGame {
           .map(([id, v]) => [id, v[1]] as [string, number])
           .sort((a, b) => b[1] - a[1]);
         this.timeLeft = Number(d.tm);
+        this.canState = Number(d.cs ?? 0);
         if (this.isHost) return; // the host renders from its own bodies
         const c = d.c as number[];
         this.canTarget.p.set(c[0], c[1], c[2]);
@@ -477,17 +537,30 @@ export class TumbangPreso extends BaseGame {
     this.tayaReact = 0;
     this.lastToucher = null;
     this.resetCan();
+    this.carrying = false;
+    if (this.humanTaya) {
+      const ids = [...this.parts.keys()];
+      const pick = this.nextTaya && this.parts.has(this.nextTaya) ? this.nextTaya : this.tayaId && this.parts.has(this.tayaId) ? this.tayaId : ids[0];
+      this.tayaId = pick ?? null;
+      this.nextTaya = null;
+      if (ids.length < 2) {
+        this.humanTaya = false; // everyone else left: the AI kid takes over
+        this.tayaId = null;
+      }
+    }
     for (const p of this.parts.values()) {
       if (p.slip) this.ctx.physics.world.removeRigidBody(p.slip);
       p.slip = null;
-      p.phase = 'throw';
-      p.holding = true;
+      const isTaya = p.id === this.tayaId;
+      p.phase = isTaya ? 'taya' : 'throw';
+      p.holding = !isTaya;
       p.knockedRound = false;
       p.wentOut = false;
+      if (isTaya) p.tayaRounds++;
     }
     this.taya.root.position.set(GUARD.x, 0, GUARD.z);
     this.taya.mode = 'idle';
-    this.toAll({ k: 'round', n: this.round });
+    this.toAll({ k: 'round', n: this.round, t: this.tayaId });
   }
 
   private hostUpdate(dt: number): void {
@@ -499,9 +572,16 @@ export class TumbangPreso extends BaseGame {
       this.parts.delete(id);
     }
 
+    if (this.humanTaya && this.tayaId && !this.parts.has(this.tayaId) && this.hostPhase === 'play') {
+      this.toast(null, 'Umalis ang taya. Bagong round!', 'bad', 1400);
+      this.tayaId = null;
+      this.hostPhase = 'over';
+      this.overT = 1.5;
+    }
+
     if (this.hostPhase === 'over') {
       this.overT -= dt;
-      this.hostTaya(dt);
+      if (!this.humanTaya) this.hostTaya(dt);
       if (this.overT <= 0) {
         if (this.round >= ROUNDS) this.hostEnd();
         else this.hostBeginRound();
@@ -510,8 +590,9 @@ export class TumbangPreso extends BaseGame {
       this.roundT += dt;
       this.hostCan();
       this.hostSlippers();
-      this.hostTaya(dt);
-      const allDone = [...this.parts.values()].every((p) => p.phase === 'safe' || p.phase === 'tagged' || p.phase === 'missed');
+      if (this.humanTaya) this.hostHumanTaya();
+      else this.hostTaya(dt);
+      const allDone = [...this.parts.values()].every((p) => p.phase === 'safe' || p.phase === 'tagged' || p.phase === 'missed' || p.phase === 'taya');
       if (allDone || this.roundT > ROUND_TIME) {
         if (!allDone) this.toast(null, 'Ubos ang oras!', 'bad', 1300);
         for (const p of this.parts.values()) if (p.phase === 'throw' || p.phase === 'out' || p.phase === 'return') p.phase = 'missed';
@@ -548,7 +629,66 @@ export class TumbangPreso extends BaseGame {
       sl,
       p,
       tm: r3(ROUND_TIME - this.roundT),
+      cs: this.canUp ? 0 : this.carrying ? 2 : 1,
     });
+  }
+
+  /** Feet yaw of a participant (for carrying the can in front of them). */
+  private yawOf(id: string): number {
+    if (id === this.selfId) return this.ctx.player.yaw;
+    return this.net?.poses.get(id)?.yaw ?? 0;
+  }
+
+  /** Multiplayer: the taya is a player. Pick up / carry / reset the can, and tag. */
+  private hostHumanTaya(): void {
+    const id = this.tayaId;
+    const can = this.canBody;
+    if (!id || !can) return;
+    const tp = this.posOf(id);
+    const me = this.parts.get(id);
+    if (!tp || !me) return;
+    if (!this.canUp) {
+      if (!this.carrying) {
+        const t = can.translation();
+        if (Math.hypot(t.x - tp.x, t.z - tp.z) < 0.95) {
+          can.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+          this.carrying = true;
+          this.toast(id, 'Hawak mo ang lata! Ibalik sa bilog.', 'small', 1100);
+        }
+      } else {
+        const yaw = this.yawOf(id);
+        can.setNextKinematicTranslation({ x: tp.x - Math.sin(yaw) * 0.4, y: tp.y + 0.75, z: tp.z - Math.cos(yaw) * 0.4 });
+        can.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 });
+        if (Math.hypot(HOME.x - tp.x, HOME.z - tp.z) < 0.85) {
+          this.resetCan();
+          this.canUp = true;
+          this.carrying = false;
+          this.lastToucher = null;
+          me.score += 2;
+          me.resets++;
+          this.toast(null, 'Nakatayo na ang lata! Takbo!', 'bad', 1100);
+          this.sfx('clang', HOME);
+        }
+      }
+      return;
+    }
+    // can is standing: touch anyone past the line to tag them
+    for (const p of this.parts.values()) {
+      if (p.id === id || (p.phase !== 'out' && p.phase !== 'return')) continue;
+      const pos = this.posOf(p.id);
+      if (!pos || pos.x >= LINE_X) continue;
+      if (Math.hypot(pos.x - tp.x, pos.z - tp.z) < 1.0) {
+        p.phase = 'tagged';
+        p.holding = false;
+        p.tagged++;
+        me.score += 10;
+        me.tagsMade++;
+        this.nextTaya = p.id;
+        this.toast(p.id, 'Taya ka! Ikaw ang susunod na taya.', 'bad', 1600);
+        this.toast(id, `Nataya mo si ${this.net?.nameOf(p.id) ?? 'siya'}! +10`, 'good', 1300);
+        this.sfx('tag');
+      }
+    }
   }
 
   private resetCan(): void {
@@ -782,9 +922,14 @@ export class TumbangPreso extends BaseGame {
         `Tumba: ${p.knocks}/${ROUNDS}`,
         `Nakabalik nang ligtas: ${p.retrieves}/${ROUNDS}`,
         p.tagged ? `Na-taya: ${p.tagged}` : 'Hindi ka na-taya!',
+        ...(p.tayaRounds ? [`Bilang taya: ${p.tagsMade} nataya, ${p.resets} itinayo`] : []),
       ],
     }));
     this.endWith(rows);
+  }
+
+  nextOpts(): Record<string, unknown> {
+    return { taya: this.nextTaya ?? this.tayaId };
   }
 
   protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
@@ -805,7 +950,7 @@ export class TumbangPreso extends BaseGame {
 }
 
 function newPart(id: string): Part {
-  return { id, phase: 'throw', holding: true, slip: null, score: 0, knocks: 0, retrieves: 0, tagged: 0, knockedRound: false, wentOut: false, landed: false };
+  return { id, phase: 'throw', holding: true, slip: null, score: 0, knocks: 0, retrieves: 0, tagged: 0, knockedRound: false, wentOut: false, landed: false, tayaRounds: 0, tagsMade: 0, resets: 0 };
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;

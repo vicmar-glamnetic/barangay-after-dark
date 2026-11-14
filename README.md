@@ -58,7 +58,7 @@ Every game can be played solo or in a lobby of up to 6 players.
 
 - At a game spot press **E** / **Laro!**, then choose **Mag-isa** (solo), **Gumawa ng lobby** (you get a 4-letter code like `KAPE`), or **Sumali gamit ang code**. You can also join from the pause menu from anywhere.
 - The lobby creator is the **host**. They pick the game (walk to another spot and choose "Laruin ito sa lobby") and press **Simulan!**. Everyone is pulled into the game; after it ends, the host can press **Ulit?** for everyone.
-- **Tumbang Preso:** everyone throws at the same can and the taya chases whoever is past the line.
+- **Tumbang Preso:** one player is the taya (2+ players). The taya cannot cross the line; walks to a fallen can to pick it up, carries it back into the circle, and while it stands tags anyone past the line by touching them. Whoever gets tagged is the next taya. Solo uses the AI taya.
 - **Sipa:** side-by-side streak battle with a live leaderboard.
 - **Patintero:** everyone runs the grid against the AI taggers.
 - **Taguan:** real hide and seek. One player seeks (rotates every round), the rest hide, and AI kids fill in up to 4 hiders. Hiders' name tags are hidden from the seeker.
