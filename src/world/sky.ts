@@ -10,6 +10,13 @@ export class Sky {
   readonly group = new THREE.Group();
   private stars: THREE.Points;
   private starMat: THREE.PointsMaterial;
+  private cloudMat: THREE.ShaderMaterial;
+  private shoot: THREE.Line;
+  private shootMat: THREE.LineBasicMaterial;
+  private shootT = -1;
+  private nextShoot = 8 + Math.random() * 10;
+  private shootFrom = new THREE.Vector3();
+  private shootDir = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, moonDir: THREE.Vector3, quality: Quality) {
     const dome = new THREE.Mesh(
@@ -89,6 +96,53 @@ export class Sky {
     halo.scale.setScalar(55);
     this.group.add(halo);
 
+    // Drifting clouds, lit at the edges by the moon. In front of the moon (radius 120 < 160).
+    this.cloudMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+      side: THREE.BackSide,
+      uniforms: { time: { value: 0 }, moonDir: { value: moonDir.clone().normalize() } },
+      vertexShader: /* glsl */ `
+        varying vec3 vDir;
+        void main() {
+          vDir = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float time; uniform vec3 moonDir;
+        varying vec3 vDir;
+        float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n(vec2 p) {
+          vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y);
+        }
+        float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * n(p); p *= 2.03; a *= 0.5; } return s; }
+        void main() {
+          if (vDir.y < 0.02) discard;
+          vec2 uv = vDir.xz / (vDir.y + 0.25) * 1.6 + vec2(time * 0.012, time * 0.004);
+          float c = fbm(uv);
+          float a = smoothstep(0.5, 0.78, c) * smoothstep(0.02, 0.25, vDir.y);
+          float moon = pow(max(0.0, dot(vDir, moonDir)), 18.0);
+          vec3 col = mix(vec3(0.07, 0.09, 0.18), vec3(0.55, 0.58, 0.72), moon * 1.5 + (1.0 - a) * 0.25);
+          gl_FragColor = vec4(col, a * 0.75);
+        }`,
+    });
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(120, 32, 12), this.cloudMat);
+    clouds.renderOrder = -5;
+    clouds.frustumCulled = false;
+    this.group.add(clouds);
+
+    // Shooting star: a short fading streak
+    const sg2 = new THREE.BufferGeometry();
+    sg2.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3));
+    sg2.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 0, 0, 0], 3));
+    this.shootMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.shoot = new THREE.Line(sg2, this.shootMat);
+    this.shoot.frustumCulled = false;
+    this.shoot.visible = false;
+    this.group.add(this.shoot);
+
     scene.add(this.group);
   }
 
@@ -96,5 +150,33 @@ export class Sky {
   update(cam: THREE.Camera, t: number): void {
     this.group.position.copy(cam.position);
     this.starMat.opacity = 0.85 + Math.sin(t * 1.7) * 0.08;
+    this.cloudMat.uniforms.time.value = t;
+
+    // shooting star every 15-40 s, lasting under a second
+    if (this.shootT < 0) {
+      this.nextShoot -= 1 / 60;
+      if (this.nextShoot <= 0) {
+        const a = Math.random() * Math.PI * 2;
+        this.shootFrom.set(Math.cos(a) * 130, 60 + Math.random() * 50, Math.sin(a) * 130);
+        this.shootDir.set(-Math.sin(a) + (Math.random() - 0.5), -0.35, Math.cos(a) + (Math.random() - 0.5)).normalize();
+        this.shootT = 0;
+        this.shoot.visible = true;
+      }
+    } else {
+      this.shootT += 1 / 60;
+      const k = this.shootT / 0.8;
+      const head = this.shootFrom.clone().addScaledVector(this.shootDir, k * 70);
+      const tail = head.clone().addScaledVector(this.shootDir, -14 * Math.min(1, k * 3));
+      const pos = this.shoot.geometry.getAttribute('position') as THREE.BufferAttribute;
+      pos.setXYZ(0, head.x, head.y, head.z);
+      pos.setXYZ(1, tail.x, tail.y, tail.z);
+      pos.needsUpdate = true;
+      this.shootMat.opacity = Math.sin(Math.min(1, k) * Math.PI);
+      if (k >= 1) {
+        this.shootT = -1;
+        this.shoot.visible = false;
+        this.nextShoot = 15 + Math.random() * 25;
+      }
+    }
   }
 }

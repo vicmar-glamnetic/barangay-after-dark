@@ -131,7 +131,7 @@ function makeTag(name: string, color: number): THREE.Sprite {
   g.fillText(name, 128 + 8, 33, w - 30);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, fog: false, transparent: true }));
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xdcdcdc, depthWrite: false, fog: false, transparent: true }));
   s.scale.set(1.4, 0.35, 1);
   s.renderOrder = 6;
   return s;

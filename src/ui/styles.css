@@ -233,3 +233,35 @@ button { font-family: var(--font); }
 .err { color: var(--bad) !important; min-height: 1.2em; }
 .loading-bar.center { margin: 10px auto; }
 .card h2.bad { color: var(--bad); }
+
+/* ------------------------------------------------------------------ polish */
+#ui::before {
+  /* cinematic vignette, drawn under every UI element */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(3, 4, 16, 0.55) 100%);
+}
+.card { animation: cardIn 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(0.94); } to { opacity: 1; transform: none; } }
+.screen.dim { animation: fadeIn 0.25s ease both; }
+@keyframes fadeIn { from { opacity: 0; } }
+.btn { transition: transform 0.12s, filter 0.12s, box-shadow 0.12s; }
+.btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.logo .l1 { display: inline-block; animation: logoFloat 4.5s ease-in-out infinite; }
+.logo .l2 { animation: neon 3.2s ease-in-out infinite; }
+@keyframes logoFloat { 50% { transform: translateY(-6px) rotate(-1deg); } }
+@keyframes neon {
+  0%, 100% { text-shadow: 0 4px 0 #1b2a6b, 0 0 30px rgba(120, 180, 255, 0.6); }
+  48% { text-shadow: 0 4px 0 #1b2a6b, 0 0 46px rgba(140, 200, 255, 0.95); }
+  50% { text-shadow: 0 4px 0 #1b2a6b, 0 0 8px rgba(120, 180, 255, 0.2); }
+  53% { text-shadow: 0 4px 0 #1b2a6b, 0 0 46px rgba(140, 200, 255, 0.95); }
+}
+.tagline, .title .meta { animation: fadeIn 1.2s 0.4s ease both; }
+.start-btn { box-shadow: 0 4px 0 #a5701b, 0 0 30px rgba(255, 209, 102, 0.45); }
+.points { transition: transform 0.2s; }
+.toast.show { animation: toastPop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1); }
+@keyframes toastPop { from { transform: translate(-50%, -50%) scale(0.6) rotate(-4deg); } }
+.big { animation: bigPop 0.18s ease-out; }
+@keyframes bigPop { from { transform: translateX(-50%) scale(1.2); } }
+@media (prefers-reduced-motion: reduce) {
+  .card, .logo .l1, .logo .l2, .toast.show, .big, .start-btn { animation: none !important; }
+}

@@ -19,6 +19,8 @@ import { buildBarangay, type World } from './world/barangay';
 import { Lighting } from './world/lighting';
 import { BlobShadows } from './world/shadows';
 import { Sky } from './world/sky';
+import { Ambient } from './world/ambient';
+import { Traffic } from './world/traffic';
 import { FONT } from './world/textures';
 
 type AppState = 'loading' | 'title' | 'play';
@@ -49,6 +51,8 @@ class App {
   private hand!: Hand;
   private games!: GameManager;
   private avatars!: Avatars;
+  private ambient!: Ambient;
+  private traffic!: Traffic;
 
   private state: AppState = 'loading';
   private paused = false;
@@ -116,6 +120,8 @@ class App {
     this.player = new Player(this.physics, this.r.camera, this.input, this.save.data.settings, this.audio);
     this.hand = new Hand(this.r.handScene);
     this.avatars = new Avatars(scene, this.blobs, this.audio);
+    this.ambient = new Ambient(scene, this.world.lampHeads, q);
+    this.traffic = new Traffic(scene, this.blobs, this.audio);
     this.games = new GameManager(
       {
         scene,
@@ -298,6 +304,8 @@ class App {
 
     if (this.state !== 'loading') {
       this.world.update(dt, t);
+      this.ambient.update(t, this.r.renderer.getPixelRatio());
+      this.traffic.update(dt, this.state === 'play' ? this.player.position : cam.position.clone().setY(50));
       this.lighting.update(dt, this.state === 'play' ? this.player.position : cam.position);
       this.blobs.update();
       this.sky.update(cam, t);

@@ -12,7 +12,7 @@ import * as THREE from 'three';
  */
 export type Sfx =
   | 'throw' | 'clang' | 'slap' | 'kick' | 'whiff' | 'pickup' | 'tag' | 'win' | 'lose'
-  | 'tick' | 'step' | 'giggle' | 'cheer' | 'ui' | 'thud' | 'perfect';
+  | 'tick' | 'step' | 'giggle' | 'cheer' | 'ui' | 'thud' | 'perfect' | 'honk';
 
 const _v = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -240,6 +240,13 @@ export class AudioSys {
         this.tone('sine', 95, 40, t, 0.16, 0.5, out);
         this.burst(t, 0.05, 'lowpass', 600, 300, 0.7, 0.3, out);
         break;
+      case 'honk':
+        // little tricycle horn: two quick nasal beeps
+        for (const dt of [0, 0.22]) {
+          this.tone('square', 415, 415, t + dt, 0.14, 0.12, out, 0.01);
+          this.tone('square', 523, 523, t + dt, 0.14, 0.08, out, 0.01);
+        }
+        break;
       case 'perfect':
         this.tone('sine', 1320, 1320, t, 0.12, 0.14, out);
         this.tone('sine', 1760, 1760, t + 0.07, 0.2, 0.12, out);
@@ -256,7 +263,6 @@ export class AudioSys {
   private startAmbience(): void {
     this.startCrickets();
     this.later(6000 + Math.random() * 8000, () => this.dogLoop());
-    this.later(12000 + Math.random() * 10000, () => this.tricycleLoop());
     this.later(2500, () => this.startVideoke());
   }
 
@@ -334,46 +340,45 @@ export class AudioSys {
     this.later(15000 + Math.random() * 25000, () => this.dogLoop());
   }
 
-  /** Two-stroke putt-putt that drives along the main road through the barangay. */
-  private tricycleLoop(): void {
-    if (this.live) {
-      const ctx = this.ctx!;
-      const t = ctx.currentTime + 0.05;
-      const dur = 9;
-      const dir = Math.random() < 0.5 ? 1 : -1;
-      const p = this.panner(new THREE.Vector3(-55 * dir, 0.8, 0), 5, 0.9);
-      if (p.positionX) {
-        p.positionX.setValueAtTime(-55 * dir, t);
-        p.positionX.linearRampToValueAtTime(55 * dir, t + dur);
-      }
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.5, t + 1.2);
-      g.gain.setValueAtTime(0.5, t + dur - 1.2);
-      g.gain.linearRampToValueAtTime(0.0001, t + dur);
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 700;
-      const engine = ctx.createOscillator();
-      engine.type = 'sawtooth';
-      engine.frequency.setValueAtTime(62, t);
-      engine.frequency.setValueAtTime(62, t + dur * 0.45);
-      engine.frequency.linearRampToValueAtTime(50, t + dur * 0.55); // doppler drop as it passes
-      const am = ctx.createGain();
-      am.gain.value = 0.5;
-      const putt = ctx.createOscillator();
-      putt.type = 'square';
-      putt.frequency.value = 17;
-      const puttDepth = ctx.createGain();
-      puttDepth.gain.value = 0.5;
-      putt.connect(puttDepth).connect(am.gain);
-      engine.connect(am).connect(lp).connect(g).connect(p).connect(this.amb);
-      engine.start(t);
-      putt.start(t);
-      engine.stop(t + dur + 0.1);
-      putt.stop(t + dur + 0.1);
+  /**
+   * Two-stroke putt-putt of a tricycle driving along the road from x0 to x1
+   * (z = laneZ) over `dur` seconds. Called by world/traffic.ts so the sound
+   * matches the vehicle you can see.
+   */
+  passBy(x0: number, x1: number, laneZ: number, dur: number): void {
+    if (!this.live) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.05;
+    const p = this.panner(new THREE.Vector3(x0, 0.8, laneZ), 5, 0.9);
+    if (p.positionX) {
+      p.positionX.setValueAtTime(x0, t);
+      p.positionX.linearRampToValueAtTime(x1, t + dur);
     }
-    this.later(35000 + Math.random() * 40000, () => this.tricycleLoop());
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.55, t + 1.0);
+    g.gain.setValueAtTime(0.55, t + dur - 1.0);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 750;
+    const engine = ctx.createOscillator();
+    engine.type = 'sawtooth';
+    engine.frequency.setValueAtTime(62, t);
+    engine.frequency.linearRampToValueAtTime(58, t + dur);
+    const am = ctx.createGain();
+    am.gain.value = 0.5;
+    const putt = ctx.createOscillator();
+    putt.type = 'square';
+    putt.frequency.value = 17;
+    const puttDepth = ctx.createGain();
+    puttDepth.gain.value = 0.5;
+    putt.connect(puttDepth).connect(am.gain);
+    engine.connect(am).connect(lp).connect(g).connect(p).connect(this.amb);
+    engine.start(t);
+    putt.start(t);
+    engine.stop(t + dur + 0.1);
+    putt.stop(t + dur + 0.1);
   }
 
   /**

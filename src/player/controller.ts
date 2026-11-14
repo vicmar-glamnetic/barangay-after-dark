@@ -40,6 +40,11 @@ export class Player {
   private stepDist = 0;
   private bobT = 0;
   private bob = 0;
+  // camera feel
+  private dip = 0; // landing squash
+  private dipVel = 0;
+  private fovKick = 0;
+  private roll = 0;
 
   constructor(private phys: Physics, private camera: THREE.PerspectiveCamera, private input: Input, private settings: Settings, private audio: AudioSys) {
     const w = phys.world;
@@ -114,7 +119,10 @@ export class Player {
     const wasGrounded = this.grounded;
     this.grounded = this.cc.computedGrounded();
     if (this.velY > 0 && mv.y < desired.y - 1e-4) this.velY = 0; // bonked head
-    if (!wasGrounded && this.grounded && this.velY < -6) this.audio.play('step', { vol: 1.4 });
+    if (!wasGrounded && this.grounded && this.velY < -3) {
+      if (this.velY < -6) this.audio.play('step', { vol: 1.4 });
+      this.dipVel = -Math.min(1.6, -this.velY * 0.16); // spring kicks the camera down
+    }
 
     const t = this.body.translation();
     this.body.setNextKinematicTranslation({ x: t.x + mv.x, y: t.y + mv.y, z: t.z + mv.z });
@@ -133,6 +141,15 @@ export class Player {
     }
     const bobTarget = this.grounded ? Math.sin(this.bobT) * Math.min(1, this.speed / 6) * 0.045 : 0;
     this.bob += (bobTarget - this.bob) * Math.min(1, dt * 12);
+
+    // landing dip: damped spring back to 0
+    this.dipVel += (-this.dip * 90 - this.dipVel * 14) * dt;
+    this.dip += this.dipVel * dt;
+    // sprint FOV kick and a little roll when strafing
+    const sprinting = inp.run && this.speed > 4.5 && this.moveEnabled;
+    this.fovKick += ((sprinting ? 6 : 0) - this.fovKick) * Math.min(1, dt * 5);
+    const rollTarget = this.moveEnabled ? -inp.moveX * 0.022 * Math.min(1, this.speed / 3) : 0;
+    this.roll += (rollTarget - this.roll) * Math.min(1, dt * 8);
   }
 
   /** After physics step: read the body and place the camera. */
@@ -144,7 +161,13 @@ export class Player {
       this.teleport(-1.5, 0.2, 7.2, 0, 0);
       return;
     }
-    this.camera.position.set(this.position.x, this.position.y + EYE + this.bob, this.position.z);
-    this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.camera.position.set(this.position.x, this.position.y + EYE + this.bob + this.dip, this.position.z);
+    this.camera.rotation.set(this.pitch, this.yaw, this.roll, 'YXZ');
+    const base = (this.camera.userData.baseFov as number | undefined) ?? this.camera.fov;
+    const fov = base + this.fovKick;
+    if (Math.abs(fov - this.camera.fov) > 0.02) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 }

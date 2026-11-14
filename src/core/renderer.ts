@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { device } from './device';
 import type { Quality } from './save';
 
@@ -15,6 +19,9 @@ export class Renderer {
   readonly handCamera: THREE.PerspectiveCamera;
   quality: Quality = 'high';
   private resizeCbs: (() => void)[] = [];
+  /** Bloom post-processing: desktop on High only (too heavy for phones). */
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
 
   constructor(canvas: HTMLCanvasElement, quality: Quality) {
     this.renderer = new THREE.WebGLRenderer({
@@ -51,6 +58,19 @@ export class Renderer {
     // Spec: cap DPR at 1.5 on mobile. Low drops to 1 for older phones.
     const cap = device.isMobile ? (q === 'high' ? 1.5 : 1) : q === 'high' ? 2 : 1;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap));
+    const wantBloom = q === 'high' && !device.isMobile;
+    if (wantBloom && !this.composer) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      // threshold keeps it to the bright stuff: bulbs, lit windows, signs, parols, fireflies
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.65, 0.55, 0.9);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(new OutputPass());
+    } else if (!wantBloom && this.composer) {
+      this.composer.dispose();
+      this.composer = null;
+      this.bloom = null;
+    }
     this.resize();
   }
 
@@ -58,11 +78,14 @@ export class Renderer {
     const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
     this.renderer.setSize(w, h, false);
+    this.composer?.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer?.setSize(w, h);
     const aspect = w / h;
     // Aim for ~100 degree horizontal FOV, clamped so phones in landscape
     // do not get a fish-eye view and tablets do not get tunnel vision.
     const vfov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(50)) / aspect));
     this.camera.fov = THREE.MathUtils.clamp(vfov, 56, 75);
+    this.camera.userData.baseFov = this.camera.fov; // the player adds a sprint FOV kick on top
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
     this.handCamera.fov = this.camera.fov;
@@ -74,8 +97,11 @@ export class Renderer {
   render(): void {
     const r = this.renderer;
     r.info.reset();
-    r.clear();
-    r.render(this.scene, this.camera);
+    if (this.composer) this.composer.render();
+    else {
+      r.clear();
+      r.render(this.scene, this.camera);
+    }
     if (this.handScene.children.some((c) => c.visible && !(c instanceof THREE.Light))) {
       r.clearDepth();
       r.render(this.handScene, this.handCamera);

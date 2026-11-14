@@ -74,7 +74,13 @@ export class Hud {
 
   setBig(text: string | null): void {
     this.bigEl.classList.toggle('hidden', text === null);
-    if (text !== null) this.set('big', this.bigEl, text);
+    if (text !== null && this.cache.get('big') !== text) {
+      this.set('big', this.bigEl, text);
+      // replay the pop animation on every change (Sipa streak counter)
+      this.bigEl.style.animation = 'none';
+      void this.bigEl.offsetWidth;
+      this.bigEl.style.animation = '';
+    }
   }
 
   setPower(v: number | null): void {

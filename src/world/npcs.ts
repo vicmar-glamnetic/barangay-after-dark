@@ -12,6 +12,9 @@ export interface KidLook {
   hair: number;
   girl: boolean;
   slipper: number;
+  /** Hair style 0-2 and shirt style 0-2 (plain, stripe, jersey number). */
+  hairStyle?: number;
+  shirtStyle?: number;
 }
 
 const SHIRTS = [0xe63946, 0xf4a261, 0x2a9d8f, 0xe9c46a, 0x457b9d, 0xf1faee, 0x9b5de5, 0x00bbf9, 0xfb5607, 0x8ac926];
@@ -27,7 +30,7 @@ const rnd = () => {
 const pick = <T,>(a: T[]): T => a[Math.floor(rnd() * a.length)];
 
 export function randomLook(): KidLook {
-  return { shirt: pick(SHIRTS), shorts: pick(SHORTS), skin: pick(SKINS), hair: 0x161210, girl: rnd() < 0.45, slipper: pick(SLIPPERS) };
+  return { shirt: pick(SHIRTS), shorts: pick(SHORTS), skin: pick(SKINS), hair: 0x161210, girl: rnd() < 0.45, slipper: pick(SLIPPERS), hairStyle: Math.floor(rnd() * 3), shirtStyle: Math.floor(rnd() * 3) };
 }
 
 /** Merge several colored primitives into one geometry with a vertex color attribute. */
@@ -60,6 +63,11 @@ export class Kid {
   readonly legR = new THREE.Group();
   private body: THREE.Mesh;
   mode: KidMode = 'idle';
+  // idle fidgets: look around, scratch head, little hop
+  private fidget: 'none' | 'look' | 'scratch' | 'hop' = 'none';
+  private fidgetT = 2 + Math.random() * 5;
+  private fidgetDur = 0;
+  private lookDir = 1;
   /** Horizontal speed (m/s); drives the run cycle. */
   speed = 0;
   phase = Math.random() * 10;
@@ -77,10 +85,39 @@ export class Kid {
       [new THREE.BoxGeometry(0.08, 0.02, 0.02).translate(0, 1.07, 0.163), 0x7a2e2e],
       [new THREE.BoxGeometry(0.37, 0.08, 0.23).translate(0, 0.58, 0), L.shorts],
     ];
+    // rosy cheeks
+    for (const sx of [-1, 1]) parts.push([new THREE.BoxGeometry(0.035, 0.022, 0.01).translate(sx * 0.1, 1.105, 0.155), 0xe08a7a]);
+    const hs = L.hairStyle ?? 0;
     if (L.girl) {
-      parts.push([new THREE.BoxGeometry(0.32, 0.3, 0.1).translate(0, 1.05, -0.12), L.hair]);
-      parts.push([new THREE.SphereGeometry(0.06, 6, 4).translate(0, 1.22, -0.17), 0xff4f9a]);
+      if (hs === 0) {
+        // long hair + clip
+        parts.push([new THREE.BoxGeometry(0.32, 0.3, 0.1).translate(0, 1.05, -0.12), L.hair]);
+        parts.push([new THREE.SphereGeometry(0.06, 6, 4).translate(0, 1.22, -0.17), 0xff4f9a]);
+      } else if (hs === 1) {
+        // pigtails with ties
+        for (const sx of [-1, 1]) {
+          parts.push([new THREE.SphereGeometry(0.075, 7, 5).translate(sx * 0.2, 1.1, -0.04), L.hair]);
+          parts.push([new THREE.SphereGeometry(0.03, 5, 4).translate(sx * 0.17, 1.15, -0.03), 0xffd166]);
+        }
+      } else {
+        // ponytail
+        parts.push([new THREE.CylinderGeometry(0.05, 0.03, 0.26, 6).translate(0, 1.05, -0.2), L.hair]);
+        parts.push([new THREE.SphereGeometry(0.035, 5, 4).translate(0, 1.19, -0.18), 0x06d6a0]);
+      }
+    } else if (hs === 1) {
+      // spiky
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        parts.push([new THREE.ConeGeometry(0.045, 0.1, 4).translate(Math.cos(a) * 0.09, 1.31, Math.sin(a) * 0.09 - 0.01), L.hair]);
+      }
+    } else if (hs === 2) {
+      // cap, worn backwards
+      parts.push([new THREE.SphereGeometry(0.185, 9, 5, 0, Math.PI * 2, 0, Math.PI * 0.42).translate(0, 1.17, -0.01), 0xe63946]);
+      parts.push([new THREE.BoxGeometry(0.16, 0.02, 0.12).translate(0, 1.2, -0.2), 0xe63946]);
     }
+    const ss = L.shirtStyle ?? 0;
+    if (ss === 1) parts.push([new THREE.BoxGeometry(0.365, 0.06, 0.225).translate(0, 0.8, 0), 0xffffff]);
+    if (ss === 2) parts.push([new THREE.BoxGeometry(0.12, 0.13, 0.01).translate(0, 0.79, 0.112), 0xffffff]);
     this.body = new THREE.Mesh(painted(parts), kidMat);
     this.root.add(this.body);
 
@@ -130,16 +167,44 @@ export class Kid {
   update(dt: number, t: number): void {
     const b = this.body;
     let bob = 0;
-    let armL = 0, armR = 0, armLz = 0, armRz = 0, legL = 0, legR = 0, lean = 0;
+    let armL = 0, armR = 0, armLz = 0, armRz = 0, legL = 0, legR = 0, lean = 0, twist = 0;
     const p = t * 2 + this.phase;
     switch (this.mode) {
-      case 'idle':
+      case 'idle': {
+        // breathing + weight shift
         bob = Math.sin(p * 1.5) * 0.015;
         armL = Math.sin(p) * 0.08;
         armR = -Math.sin(p) * 0.08;
         armLz = 0.08;
         armRz = -0.08;
+        lean = Math.sin(p * 0.5) * 0.03;
+        this.fidgetT -= dt;
+        if (this.fidget === 'none' && this.fidgetT <= 0) {
+          const r = Math.random();
+          this.fidget = r < 0.5 ? 'look' : r < 0.8 ? 'scratch' : 'hop';
+          this.fidgetDur = this.fidget === 'hop' ? 0.45 : 1.6;
+          this.lookDir = Math.random() < 0.5 ? -1 : 1;
+        }
+        if (this.fidget !== 'none') {
+          this.fidgetDur -= dt;
+          const k = Math.sin(Math.max(0, Math.min(1, 1 - this.fidgetDur / (this.fidget === 'hop' ? 0.45 : 1.6))) * Math.PI);
+          if (this.fidget === 'look') twist = this.lookDir * 0.55 * k;
+          if (this.fidget === 'scratch') {
+            armRz = -2.3 * k;
+            armR = -0.6 * k;
+          }
+          if (this.fidget === 'hop') {
+            bob += k * 0.14;
+            armLz = 0.08 + k * 0.5;
+            armRz = -0.08 - k * 0.5;
+          }
+          if (this.fidgetDur <= 0) {
+            this.fidget = 'none';
+            this.fidgetT = 3 + Math.random() * 6;
+          }
+        }
         break;
+      }
       case 'wave':
         bob = Math.sin(p * 2) * 0.02;
         armRz = -2.6 + Math.sin(t * 9 + this.phase) * 0.35;
@@ -203,6 +268,9 @@ export class Kid {
     }
     b.position.y = bob;
     b.rotation.x = lean;
+    b.rotation.y += (twist - b.rotation.y) * Math.min(1, dt * 6);
+    // legs follow the body upward on hops/jumps (crouch keeps feet planted)
+    this.legL.position.y = this.legR.position.y = 0.55 + Math.max(0, bob);
     this.armL.position.y = this.armR.position.y = 0.95 + bob;
     const k = Math.min(1, dt * 14);
     this.armL.rotation.x += (armL - this.armL.rotation.x) * k;
@@ -261,7 +329,7 @@ export class NpcGroup {
     }
     const { tex, aspect } = labelTexture('...', '...', '#ffd166');
     this.labelTex = tex;
-    this.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: false, depthWrite: false, transparent: true }));
+    this.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xdcdcdc, fog: false, depthWrite: false, transparent: true }));
     this.label.scale.set(1.15 * aspect, 1.15, 1);
     this.label.position.copy(labelPos);
     this.label.renderOrder = 5;

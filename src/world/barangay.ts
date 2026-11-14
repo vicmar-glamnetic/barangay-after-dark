@@ -4,7 +4,7 @@ import type { Quality } from '../core/save';
 import { Kit, StaticBuilder, noise2, sagCurve, type Frame } from './geo';
 import type { Lighting } from './lighting';
 import {
-  B, C, TexKit, arch, barricade, coconut, court, house, jeepney, langitArea, local, parolGeometry,
+  B, C, TexKit, arch, coconut, court, house, jeepney, langitArea, local, parolGeometry,
   pottedPlant, sampayan, sariSari, shade, tree, tricycle, waitingShed,
 } from './props';
 import { capizTexture, courtTexture, radialTexture, signTexture, storeWindowTexture } from './textures';
@@ -26,6 +26,8 @@ export const HALF = 29.7;
 
 export interface World {
   spawn: { pos: THREE.Vector3; yaw: number };
+  /** Street lamp head positions (moths circle these). */
+  lampHeads: THREE.Vector3[];
   triangles: number;
   update(dt: number, t: number): void;
 }
@@ -137,7 +139,7 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   jeepney(b, { x: 18.5, z: -1.9, rot: -Math.PI / 2 }, 0x2f6fd6, 0xf2c230, 0xffffff, T.jeepB);
   tricycle(b, { x: 5, z: 2.3, rot: Math.PI / 2 }, 0xf2c230);
   arch(b, { x: 28.2, z: 0, rot: -Math.PI / 2 });
-  barricade(b, { x: -28.4, z: 0, rot: Math.PI / 2 });
+  arch(b, { x: -28.2, z: 0, rot: Math.PI / 2 }); // west arch (road stays open for traffic)
 
   // ---------------------------------------------------------------- south side
   const courtInfo = court(b, COURT);
@@ -194,7 +196,10 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
     scene.add(s);
     return s;
   };
-  for (const h of lampHeads) glow(h.clone().setY(h.y - 0.12), 0xffb35c, 2.6);
+  const lampGlows = lampHeads.map((h) => glow(h.clone().setY(h.y - 0.12), 0xffb35c, 2.6));
+  // one old lamp near the plaza flickers now and then
+  const flicker = lampGlows[4];
+  let flickT = 6;
   glow(storeBulb, 0xffe0a8, 1.4);
   glow(floodA, 0xfff0d0, 2.4);
   glow(floodB, 0xfff0d0, 2.4);
@@ -265,8 +270,19 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
 
   return {
     spawn: { pos: new THREE.Vector3(-1.5, 0.2, 7.2), yaw: -0.25 },
+    lampHeads,
     triangles: 0,
     update(dt: number, t: number) {
+      flickT -= dt;
+      if (flickT < 0) {
+        // a burst of 0.6 s of stutter, then steady for a while
+        const on = Math.sin(t * 61) * Math.sin(t * 23) > -0.2;
+        (flicker.material as THREE.SpriteMaterial).opacity = on ? 1 : 0.15;
+        if (flickT < -0.6) {
+          flickT = 4 + Math.random() * 7;
+          (flicker.material as THREE.SpriteMaterial).opacity = 1;
+        }
+      }
       const i = Math.floor(t * 1.6) % vkColors.length;
       vkMat.color.copy(vkColors[i]).lerp(vkColors[(i + 1) % vkColors.length], (t * 1.6) % 1);
       bulbMat.opacity = 0.85 + Math.sin(t * 2.3) * 0.1;
