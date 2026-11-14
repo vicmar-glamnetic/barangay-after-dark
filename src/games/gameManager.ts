@@ -113,6 +113,7 @@ export class GameManager {
   }
 
   start(g: BaseGame): void {
+    if (this.active) this.quit(); // never run two games at once
     this.active = g;
     this.ended = false;
     g.group.setHubVisible(false);

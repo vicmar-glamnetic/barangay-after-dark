@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { labelTexture, radialTexture } from './textures';
 import type { BlobShadows } from './shadows';
 
-export type KidMode = 'idle' | 'wave' | 'cheer' | 'run' | 'carry' | 'crouch' | 'count' | 'still';
+export type KidMode = 'idle' | 'wave' | 'cheer' | 'run' | 'carry' | 'crouch' | 'count' | 'still' | 'guard';
 
 export interface KidLook {
   shirt: number;
@@ -186,6 +186,18 @@ export class Kid {
         bob = Math.sin(p) * 0.01;
         lean = 0.15;
         break;
+      case 'guard': {
+        // Patintero tagger: arms stretched out, legs shuffling when moving
+        this.phase += dt * (3 + this.speed * 2.5);
+        const s = Math.sin(this.phase) * Math.min(1, this.speed / 3) * 0.5;
+        armLz = 1.35;
+        armRz = -1.35;
+        legL = s;
+        legR = -s;
+        bob = -0.04 + Math.abs(Math.cos(this.phase)) * 0.03 * Math.min(1, this.speed);
+        lean = 0.12;
+        break;
+      }
       case 'still':
         break;
     }

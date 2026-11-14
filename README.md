@@ -20,6 +20,7 @@ To test on a real phone, connect it to the same Wi-Fi and open the **Network** U
 | `npm run preview` | Serve the built `dist/` locally (service worker active) |
 | `npm run typecheck` | TypeScript only |
 | `npm run icons` | Regenerate the PWA icons in `public/icons/` |
+| `npm run deploy` | Build and publish `dist/` to the `gh-pages` branch (GitHub Pages) |
 
 ### Debug URL flags
 
@@ -45,7 +46,9 @@ Settings (in the pause menu) include look sensitivity, invert Y, Low/High qualit
 
 1. **Tumbang Preso** (done): throw your tsinelas at the can from behind the line. If it falls, grab your slipper and get back behind the line before the taya sets the can up and tags you. 3 rounds.
 2. **Sipa** (done): kick the sipa when it drops into the ring. Every kick gets faster. Score = streak.
-3. **Patintero**, 4. **Taguan**, 5. **Langit-Lupa**: the kids and "Soon!" labels are in the hub, and each module has its planned design written in its header comment.
+3. **Patintero** (done): on the covered court. Cross all 5 lines to the far end and back. Each line tagger can only slide along its own line and only tags you while you are crossing it; the center-line tagger guards the middle. Do not step outside the grid. 3 lives, 90 seconds.
+4. **Taguan** (done): count to ten in the dark ("Isa... dalawa..."), then find the 4 hidden kids within 90 seconds. Giggles and footsteps are positional, so they get louder as you get closer, and the HUD says "Malamig / Malapit-lapit / Mainit na!". A kid is found when you are close, looking at them, and no wall is in the way.
+5. **Langit-Lupa** (soon): the kids, "Soon!" label and climbable crates are in the hub, and the planned design is in the module's header comment.
 
 Games unlock in order. Progress, best scores and Tropa Points are saved in `localStorage`.
 
@@ -91,11 +94,10 @@ Or drag and drop the `dist/` folder into the Netlify dashboard.
 **GitHub Pages:**
 
 ```bash
-npm run build
-npx gh-pages -d dist    # publishes dist/ to the gh-pages branch
+npm run deploy    # builds, then force-pushes dist/ to the gh-pages branch of "origin"
 ```
 
-Then set Pages to serve from the `gh-pages` branch. You can also use a GitHub Actions workflow that runs `npm ci && npm run build` and uploads `dist/` with `actions/upload-pages-artifact`.
+The first time, enable Pages for the `gh-pages` branch (repo Settings, Pages). The game is then served at `https://<user>.github.io/<repo>/`.
 
 ### Add to Home Screen (fullscreen)
 
