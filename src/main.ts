@@ -83,6 +83,7 @@ class App {
         if (!this.games.playing) this.hud.setObjective(this.games.hubObjective());
       },
       onUiSound: () => this.audio.play('ui'),
+      onFace: (face) => this.games?.session?.setFace(face),
     }, () => this.input.usingTouch);
     this.overlays = new Overlays(this.ui);
     this.setTouchMode(this.input.usingTouch);

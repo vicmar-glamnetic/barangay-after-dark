@@ -1,4 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
+import { isValidFace } from './face';
 
 /*
  * Peer-to-peer lobby session (WebRTC via PeerJS).
@@ -18,13 +19,16 @@ export interface PlayerInfo {
   id: string;
   name: string;
   color: number;
+  /** Optional custom face (small JPEG data URL, see net/face.ts). */
+  face?: string;
 }
 
 /** [x, y, z, yaw, anim] where anim: 0 idle, 1 run, 2 cheer, 3 crouch */
 export type Pose = [number, number, number, number, number];
 
 type Msg =
-  | { t: 'hello'; name: string }
+  | { t: 'hello'; name: string; face?: string | null }
+  | { t: 'face'; face: string | null }
   | { t: 'roster'; players: PlayerInfo[]; game: string; host: string }
   | { t: 'pose'; p: Pose }
   | { t: 'poses'; p: Record<string, Pose> }
@@ -100,7 +104,7 @@ export class Session {
   // ------------------------------------------------------------------ create / join
 
   /** Create a lobby for `gameId`. Retries with new codes if one is taken. */
-  static async host(gameId: string, name: string): Promise<Session> {
+  static async host(gameId: string, name: string, face: string | null = null): Promise<Session> {
     let lastErr: unknown;
     for (let attempt = 0; attempt < 4; attempt++) {
       const code = makeCode();
@@ -109,7 +113,7 @@ export class Session {
         const s = new Session(peer, true, code, gameId, name);
         s.selfId = peer.id;
         s.hostId = peer.id;
-        s.players = [{ id: peer.id, name, color: COLORS[0] }];
+        s.players = [{ id: peer.id, name, color: COLORS[0], ...(isValidFace(face) ? { face } : {}) }];
         peer.on('connection', (c) => s.acceptClient(c));
         peer.on('disconnected', () => peer.reconnect());
         return s;
@@ -122,7 +126,7 @@ export class Session {
   }
 
   /** Join an existing lobby by code. Resolves once the roster arrives. */
-  static async join(rawCode: string, name: string): Promise<Session> {
+  static async join(rawCode: string, name: string, face: string | null = null): Promise<Session> {
     const code = cleanCode(rawCode);
     if (code.length !== 4) throw new Error('Apat na letra ang code.');
     let peer: Peer;
@@ -147,7 +151,7 @@ export class Session {
       });
       conn.on('open', () => {
         s.conns.set(s.hostId, conn);
-        conn.send({ t: 'hello', name } satisfies Msg);
+        conn.send({ t: 'hello', name, face: isValidFace(face) ? face : null } satisfies Msg);
       });
       conn.on('data', (raw) => {
         const m = raw as Msg;
@@ -187,7 +191,15 @@ export class Session {
           if (this.players.some((p) => p.id === c.peer)) return;
           const used = new Set(this.players.map((p) => p.color));
           const color = COLORS.find((x) => !used.has(x)) ?? COLORS[this.players.length % COLORS.length];
-          this.players.push({ id: c.peer, name: sanitizeName(m.name), color });
+          this.players.push({ id: c.peer, name: sanitizeName(m.name), color, ...(isValidFace(m.face) ? { face: m.face } : {}) });
+          this.sendRoster();
+          break;
+        }
+        case 'face': {
+          const p = this.players.find((x) => x.id === c.peer);
+          if (!p) return;
+          if (isValidFace(m.face)) p.face = m.face;
+          else delete p.face;
           this.sendRoster();
           break;
         }
@@ -239,7 +251,7 @@ export class Session {
   private handleFromHost(m: Msg): void {
     switch (m.t) {
       case 'roster':
-        this.players = m.players;
+        this.players = m.players.map((p) => (isValidFace(p.face) ? p : { id: p.id, name: p.name, color: p.color }));
         this.gameId = m.game;
         this.hostId = m.host;
         for (const id of [...this.poses.keys()]) if (!m.players.some((p) => p.id === id)) this.poses.delete(id);
@@ -301,6 +313,20 @@ export class Session {
     } else {
       const c = this.conns.get(this.hostId);
       if (c?.open) c.send({ t: 'pose', p: this.localPose } satisfies Msg);
+    }
+  }
+
+  /** Change my face for everyone in the lobby (null removes it). */
+  setFace(face: string | null): void {
+    const f = isValidFace(face) ? face : null;
+    if (this.isHost) {
+      const me = this.players.find((p) => p.id === this.selfId);
+      if (!me) return;
+      if (f) me.face = f;
+      else delete me.face;
+      this.sendRoster();
+    } else {
+      this.conns.get(this.hostId)?.send({ t: 'face', face: f } satisfies Msg);
     }
   }
 

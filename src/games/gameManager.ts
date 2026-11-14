@@ -154,7 +154,7 @@ export class GameManager {
     }
     this.menus.showBusy('Gumagawa ng lobby...');
     try {
-      const s = await Session.host(g.id, this.menus.playerName);
+      const s = await Session.host(g.id, this.menus.playerName, this.menus.playerFace);
       this.attachSession(s);
       this.showLobby();
     } catch (e) {
@@ -167,7 +167,7 @@ export class GameManager {
     this.menus.showJoin(
       async (code) => {
         try {
-          const s = await Session.join(code, this.menus.playerName);
+          const s = await Session.join(code, this.menus.playerName, this.menus.playerFace);
           this.attachSession(s);
           this.showLobby();
           return null;

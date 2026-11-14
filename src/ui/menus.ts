@@ -2,6 +2,7 @@ import type { SaveStore, Settings } from '../core/save';
 import type { GameResult } from '../games/types';
 import { cleanCode, sanitizeName, type Session } from '../net/session';
 import { device } from '../core/device';
+import { loadSavedFace, processFaceFile, saveFace } from '../net/face';
 import { copyText, el, onTap } from './dom';
 
 type Kind = 'none' | 'pause' | 'settings' | 'end' | 'game' | 'join' | 'lobby' | 'busy';
@@ -14,6 +15,8 @@ export interface MenuCallbacks {
   onSettings: (s: Settings) => void;
   onResetProgress: () => void;
   onUiSound: () => void;
+  /** My custom face changed (null = removed). */
+  onFace: (face: string | null) => void;
 }
 
 /**
@@ -207,6 +210,7 @@ export class Menus {
         ['On', () => s.showFps, () => (s.showFps = true)],
       ])),
       el('label', {}, el('span', { text: 'Volume' }), vol),
+      this.faceField(),
       el('div.btns', {}, this.button('Balik', '', back), reset),
     );
     this.open('settings', card);
@@ -265,6 +269,60 @@ export class Menus {
     }
   }
 
+  private face: string | null | undefined = undefined;
+
+  /** My custom face (small JPEG data URL), remembered on this device only. */
+  get playerFace(): string | null {
+    if (this.face === undefined) this.face = loadSavedFace();
+    return this.face;
+  }
+
+  private setFace(f: string | null): void {
+    this.face = f;
+    saveFace(f);
+    this.cb.onFace(f);
+  }
+
+  /** Pick / preview / remove a custom face picture. */
+  private faceField(): HTMLElement {
+    const preview = el('span.face-prev');
+    const fileIn = el('input', { attrs: { type: 'file', accept: 'image/*', 'aria-label': 'Larawan ng mukha' } }) as HTMLInputElement;
+    fileIn.style.display = 'none';
+    const err = el('p.err');
+    const remove = this.button('Alisin', '.alt.small', () => {
+      this.setFace(null);
+      render();
+    });
+    const pick = this.button('Pumili', '.alt.small', () => fileIn.click());
+    const render = () => {
+      const f = this.playerFace;
+      preview.style.backgroundImage = f ? `url("${f}")` : '';
+      preview.classList.toggle('empty', !f);
+      remove.classList.toggle('hidden', !f);
+      pick.textContent = f ? 'Palitan' : 'Pumili';
+    };
+    fileIn.addEventListener('change', async () => {
+      const file = fileIn.files?.[0];
+      fileIn.value = '';
+      if (!file) return;
+      try {
+        this.setFace(await processFaceFile(file));
+        err.textContent = '';
+      } catch (e) {
+        err.textContent = (e as Error).message;
+      }
+      render();
+    });
+    render();
+    return el(
+      'div.field',
+      {},
+      el('div.lbl', {}, el('span', { text: 'Mukha mo' }), el('span.face-ctl', {}, preview, pick, remove, fileIn)),
+      el('p.hint', { text: 'Makikita ng tropa mo sa lobby. Hindi ito ina-upload sa server.' }),
+      err,
+    );
+  }
+
   private nameField(): HTMLElement {
     const input = el('input.text-in', { attrs: { maxlength: '14', value: this.playerName, 'aria-label': 'Pangalan', autocomplete: 'off' } }) as HTMLInputElement;
     input.value = this.playerName;
@@ -292,6 +350,7 @@ export class Menus {
       el('p', { text: 'Mag-isa o kasama ang tropa?' }),
       o.lockedMsg ? el('p', { text: o.lockedMsg }) : null,
       this.nameField(),
+      this.faceField(),
       el(
         'div.btns.col',
         {},
@@ -344,6 +403,7 @@ export class Menus {
       input,
       err,
       this.nameField(),
+      this.faceField(),
       el('div.btns', {}, joinBtn, this.button('Balik', '.alt', onBack)),
     );
     this.open('join', card);
@@ -366,7 +426,9 @@ export class Menus {
       title.textContent = `Lobby: ${gameName(s.gameId)}`;
       list.replaceChildren(
         ...s.players.map((p) =>
-          el('div.row', {}, el('i', { attrs: { style: `background:#${p.color.toString(16).padStart(6, '0')}` } }),
+          el('div.row', {}, p.face
+            ? el('img.face-thumb', { attrs: { src: p.face, alt: '', style: `border-color:#${p.color.toString(16).padStart(6, '0')}` } })
+            : el('i', { attrs: { style: `background:#${p.color.toString(16).padStart(6, '0')}` } }),
             el('span', { text: p.name + (p.id === s.selfId ? ' (ikaw)' : '') + (p.id === s.hostId ? '  host' : '') })),
         ),
       );
@@ -386,6 +448,7 @@ export class Menus {
       el('div.btns', {}, copyBtn),
       list,
       status,
+      this.faceField(),
       el('div.btns', {}, s.isHost ? startBtn : null, this.button('Isara', '.alt', o.onClose), this.button('Umalis sa lobby', '.danger.small', o.onLeave)),
     );
     this.open('lobby', card);

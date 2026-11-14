@@ -63,6 +63,8 @@ Every game can be played solo or in a lobby of up to 6 players.
 - **Patintero:** everyone runs the grid against the AI taggers.
 - **Taguan:** real hide and seek. One player seeks (rotates every round), the rest hide, and AI kids fill in up to 4 hiders. Hiders' name tags are hidden from the seeker.
 
+**Custom face:** choose "Mukha mo" (in Settings, at a game spot, or in the lobby) and pick a picture. It is center-cropped and shrunk to a 96x96 JPEG (a few KB), kept on your device only, and sent directly to the players in your lobby, who see it on your character and next to your name. The host only accepts small JPEG / PNG / WebP image data.
+
 How it works: peer-to-peer WebRTC through [PeerJS](https://peerjs.com/). The free PeerJS cloud server only introduces players; game traffic goes directly between devices. The host runs the game logic and broadcasts state at 15 Hz; others send their position and actions. Code lives in `src/net/` (`session.ts`, `avatars.ts`) and each game's `onHostMsg` / `onClientMsg`.
 
 Limits to know:

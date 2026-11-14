@@ -51,6 +51,38 @@ function painted(parts: [THREE.BufferGeometry, number][]): THREE.BufferGeometry 
 
 const kidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 
+let faceGeo: THREE.BufferGeometry | null = null;
+/** Front cap of a sphere just outside the head, with flat (planar) UVs so a square picture maps straight on. */
+function faceGeometry(): THREE.BufferGeometry {
+  if (faceGeo) return faceGeo;
+  const R = 0.2; // just outside the drawn eyes, cheeks and mouth so they never poke through
+  const g = new THREE.SphereGeometry(R, 16, 12, Math.PI / 2 - 1.05, 2.1, Math.PI / 2 - 1.05, 2.1);
+  const pos = g.getAttribute('position');
+  const uv = g.getAttribute('uv');
+  const half = 0.16;
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, 0.5 + pos.getX(i) / (2 * half), 0.5 + pos.getY(i) / (2 * half));
+  uv.needsUpdate = true;
+  faceGeo = g;
+  return g;
+}
+
+let maskTex: THREE.Texture | null = null;
+/** Round mask so the square picture shows as a circle. */
+function faceMask(): THREE.Texture {
+  if (maskTex) return maskTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#fff';
+  g.beginPath();
+  g.arc(32, 32, 31, 0, Math.PI * 2);
+  g.fill();
+  maskTex = new THREE.CanvasTexture(c);
+  return maskTex;
+}
+
 /** Bone indices in each kid's skeleton. */
 const B_ROOT = 0, B_BODY = 1, B_ARM_L = 2, B_ARM_R = 3, B_LEG_L = 4, B_LEG_R = 5;
 
@@ -168,6 +200,33 @@ export class Kid {
     mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.75, 0), 1.15);
     void B_ROOT;
     this.root.add(mesh);
+  }
+
+  private faceMesh: THREE.Mesh | null = null;
+
+  /**
+   * Put a custom picture on the front of the head (a round "face sticker"
+   * that follows the head). null removes it and shows the drawn face again.
+   */
+  setFace(tex: THREE.Texture | null): void {
+    if (this.faceMesh) {
+      this.faceMesh.removeFromParent();
+      (this.faceMesh.material as THREE.Material).dispose();
+      this.faceMesh = null;
+    }
+    if (!tex) return;
+    const mat = new THREE.MeshLambertMaterial({
+      map: tex,
+      alphaMap: faceMask(),
+      alphaTest: 0.5,
+      emissive: 0xffffff,
+      emissiveMap: tex,
+      emissiveIntensity: 0.35, // stays readable at night
+    });
+    const m = new THREE.Mesh(faceGeometry(), mat);
+    m.position.set(0, 1.14, 0); // head center, in body-bone space
+    this.body.add(m);
+    this.faceMesh = m;
   }
 
   addShadow(blobs: BlobShadows): void {

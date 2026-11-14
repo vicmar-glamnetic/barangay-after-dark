@@ -265,3 +265,16 @@ button { font-family: var(--font); }
 @media (prefers-reduced-motion: reduce) {
   .card, .logo .l1, .logo .l2, .toast.show, .big, .start-btn { animation: none !important; }
 }
+
+/* ------------------------------------------------------------------ custom face */
+.field { margin: 10px 0; text-align: left; }
+.field .lbl { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; }
+.face-ctl { display: inline-flex; align-items: center; gap: 8px; }
+.face-prev {
+  width: 44px; height: 44px; border-radius: 50%; background: center / cover no-repeat rgba(255, 255, 255, 0.08);
+  border: 2px solid var(--accent); flex: none;
+}
+.face-prev.empty { border-style: dashed; border-color: rgba(255, 255, 255, 0.3); }
+.field .hint { font-size: 12px !important; margin: 4px 0 0 !important; }
+.field .err { font-size: 13px !important; margin: 2px 0 0 !important; }
+.roster .face-thumb { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 2px solid; flex: none; }

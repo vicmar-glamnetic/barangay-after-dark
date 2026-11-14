@@ -4,6 +4,7 @@ import { Kid, randomLook, type KidMode } from '../world/npcs';
 import type { BlobShadows } from '../world/shadows';
 import { FONT } from '../world/textures';
 import type { Session } from './session';
+import { faceTexture } from './face';
 
 const ANIM: KidMode[] = ['idle', 'run', 'cheer', 'crouch'];
 const _before = new THREE.Vector3();
@@ -15,6 +16,7 @@ interface Avatar {
   name: string;
   pos: THREE.Vector3;
   stepDist: number;
+  face: string | undefined;
 }
 
 /**
@@ -70,7 +72,14 @@ export class Avatars {
       const rp = s.poses.get(p.id);
       const pos = new THREE.Vector3(rp?.x ?? 0, rp?.y ?? 0, rp?.z ?? 0);
       kid.root.position.copy(pos);
-      this.list.set(p.id, { kid, tag, name: p.name, pos, stepDist: 0 });
+      this.list.set(p.id, { kid, tag, name: p.name, pos, stepDist: 0, face: undefined });
+    }
+    // custom faces (update when someone picks a new one)
+    for (const p of s.players) {
+      const a = this.list.get(p.id);
+      if (!a || a.face === p.face) continue;
+      a.face = p.face;
+      a.kid.setFace(p.face ? faceTexture(p.face) : null);
     }
     for (const [id, a] of this.list) {
       if (!s.players.some((p) => p.id === id)) {
