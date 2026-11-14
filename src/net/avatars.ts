@@ -6,6 +6,8 @@ import { FONT } from '../world/textures';
 import type { Session } from './session';
 
 const ANIM: KidMode[] = ['idle', 'run', 'cheer', 'crouch'];
+const _before = new THREE.Vector3();
+const _target = new THREE.Vector3();
 
 interface Avatar {
   kid: Kid;
@@ -81,12 +83,12 @@ export class Avatars {
     for (const [id, a] of this.list) {
       const rp = s.poses.get(id);
       if (!rp) continue;
-      const before = a.pos.clone();
+      _before.copy(a.pos);
       const k = 1 - Math.exp(-dt * 12);
-      const far = a.pos.distanceToSquared(new THREE.Vector3(rp.x, rp.y, rp.z)) > 25;
-      if (far) a.pos.set(rp.x, rp.y, rp.z);
-      else a.pos.lerp(new THREE.Vector3(rp.x, rp.y, rp.z), k);
-      const moved = a.pos.distanceTo(before);
+      _target.set(rp.x, rp.y, rp.z);
+      if (a.pos.distanceToSquared(_target) > 25) a.pos.copy(_target);
+      else a.pos.lerp(_target, k);
+      const moved = a.pos.distanceTo(_before);
       const kid = a.kid;
       kid.root.position.copy(a.pos);
       let d = rp.yaw + Math.PI - kid.root.rotation.y; // camera looks down -Z, kid faces +Z

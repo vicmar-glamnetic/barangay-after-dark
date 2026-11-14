@@ -81,7 +81,7 @@ export class GameManager {
   // ================================================================== frame
 
   update(dt: number, t: number, camPos: THREE.Vector3, controlsActive: boolean, simulate: boolean): void {
-    for (const g of this.games) g.group.update(dt, t, camPos);
+    for (const g of this.games) g.group.update(dt, t, camPos, g === this.active);
     const { hud, touch, input, player, isTouch } = this.ctx;
 
     if (this.active) {

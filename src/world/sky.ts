@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Quality } from '../core/save';
+import { device } from '../core/device';
 import { radialTexture } from './textures';
 
 /**
@@ -11,6 +12,7 @@ export class Sky {
   private stars: THREE.Points;
   private starMat: THREE.PointsMaterial;
   private cloudMat: THREE.ShaderMaterial;
+  private clouds!: THREE.Mesh;
   private shoot: THREE.Line;
   private shootMat: THREE.LineBasicMaterial;
   private shootT = -1;
@@ -103,6 +105,8 @@ export class Sky {
       fog: false,
       side: THREE.BackSide,
       uniforms: { time: { value: 0 }, moonDir: { value: moonDir.clone().normalize() } },
+      // full-sky shader: fewer noise octaves on phones / Low keeps fill cost down
+      defines: { OCTAVES: quality === 'high' && !device.isMobile ? 4 : 3 },
       vertexShader: /* glsl */ `
         varying vec3 vDir;
         void main() {
@@ -117,7 +121,7 @@ export class Sky {
           vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y);
         }
-        float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * n(p); p *= 2.03; a *= 0.5; } return s; }
+        float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < OCTAVES; i++) { s += a * n(p); p *= 2.03; a *= 0.5; } return s; }
         void main() {
           if (vDir.y < 0.02) discard;
           vec2 uv = vDir.xz / (vDir.y + 0.25) * 1.6 + vec2(time * 0.012, time * 0.004);
@@ -128,7 +132,8 @@ export class Sky {
           gl_FragColor = vec4(col, a * 0.75);
         }`,
     });
-    const clouds = new THREE.Mesh(new THREE.SphereGeometry(120, 32, 12), this.cloudMat);
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(120, 24, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), this.cloudMat);
+    this.clouds = clouds;
     clouds.renderOrder = -5;
     clouds.frustumCulled = false;
     this.group.add(clouds);
@@ -144,6 +149,11 @@ export class Sky {
     this.group.add(this.shoot);
 
     scene.add(this.group);
+  }
+
+  /** Auto FPS: hide the cloud layer under load. */
+  setExtras(v: boolean): void {
+    this.clouds.visible = v;
   }
 
   /** Keep the dome centered on the camera and gently twinkle the stars. */

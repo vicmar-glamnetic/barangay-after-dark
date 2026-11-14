@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GameData } from '../net/session';
 import { Kid } from '../world/npcs';
 import { BaseGame, type EndRow } from './baseGame';
@@ -108,17 +109,23 @@ export class LangitLupa extends BaseGame {
   protected onAttach(): void {
     const { scene, physics } = this.ctx;
     // extra crates (permanent, so they are climbable in the hub too)
-    const wood = new THREE.MeshLambertMaterial({ color: 0x8a5a36 });
-    const rim = new THREE.MeshLambertMaterial({ color: 0x4e3320 });
+    const parts: THREE.BufferGeometry[] = [];
+    const tint = (g: THREE.BufferGeometry, hex: number) => {
+      const ng = g.toNonIndexed();
+      ng.deleteAttribute('uv');
+      const c = new THREE.Color(hex);
+      const a = new Float32Array(ng.getAttribute('position').count * 3);
+      for (let i = 0; i < a.length; i += 3) a.set([c.r, c.g, c.b], i);
+      ng.setAttribute('color', new THREE.BufferAttribute(a, 3));
+      return ng;
+    };
     for (const [x, z, w, h, d] of EXTRA) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wood);
-      m.position.set(x, h / 2, z);
-      const top = new THREE.Mesh(new THREE.BoxGeometry(w + 0.03, 0.05, d + 0.03), rim);
-      top.position.set(x, h - 0.02, z);
-      scene.add(m, top);
+      parts.push(tint(new THREE.BoxGeometry(w, h, d).translate(x, h / 2, z), 0x8a5a36));
+      parts.push(tint(new THREE.BoxGeometry(w + 0.03, 0.05, d + 0.03).translate(x, h - 0.02, z), 0x4e3320));
       physics.addBox(x, h / 2, z, w / 2, h / 2, d / 2);
       BLOCKS.push([x - w / 2, x + w / 2, z - d / 2, z + d / 2]);
     }
+    scene.add(new THREE.Mesh(mergeGeometries(parts, false)!, new THREE.MeshLambertMaterial({ vertexColors: true })));
     // chalk boundary (only visible during the game)
     this.boundary = new THREE.Group();
     const mat = new THREE.MeshBasicMaterial({ color: 0xffd6a5, transparent: true, opacity: 0.6, depthWrite: false, fog: false });

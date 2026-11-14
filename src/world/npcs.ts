@@ -292,6 +292,8 @@ export interface KidPlacement {
   y?: number;
 }
 
+const CULL_DIST = 45;
+
 const ringTex = radialTexture('rgba(255,255,255,0)', 'rgba(255,255,255,0)', 128, [
   [0.72, 'rgba(255,255,255,0)'],
   [0.86, 'rgba(255,255,255,0.9)'],
@@ -349,13 +351,17 @@ export class NpcGroup {
   }
 
   /** Hide label + ring while this group's game is running. */
+  private hubVisible = true;
+
   setHubVisible(v: boolean): void {
-    this.label.visible = v;
-    this.ring.visible = v;
+    this.hubVisible = v;
+    this.label.visible = v && !this.culled;
+    this.ring.visible = v && !this.culled;
   }
 
   /** Put every kid back where they stand in the hub. */
   resetToHome(groundAt: (x: number, z: number) => number): void {
+    this.culled = false;
     this.kids.forEach((k, i) => {
       const pl = this.home[i];
       k.root.position.set(pl.x, pl.y ?? groundAt(pl.x, pl.z), pl.z);
@@ -366,7 +372,22 @@ export class NpcGroup {
     });
   }
 
-  update(dt: number, t: number, camPos: THREE.Vector3): void {
+  private culled = false;
+  private savedVis: boolean[] = [];
+
+  /**
+   * @param keep true for the group of the game being played (never culled).
+   * Groups farther than CULL_DIST stop drawing and animating; fog hides them anyway.
+   */
+  update(dt: number, t: number, camPos: THREE.Vector3, keep = false): void {
+    const far = !keep && camPos.distanceTo(this.spot) > CULL_DIST;
+    if (far !== this.culled) {
+      this.culled = far;
+      if (far) this.savedVis = this.kids.map((k) => k.root.visible);
+      this.kids.forEach((k, i) => (k.root.visible = far ? false : this.savedVis[i] ?? true));
+      this.label.visible = this.ring.visible = !far && this.hubVisible;
+    }
+    if (far) return;
     for (const k of this.kids) k.update(dt, t);
     const d = camPos.distanceTo(this.label.position);
     const m = this.label.material as THREE.SpriteMaterial;

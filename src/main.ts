@@ -4,6 +4,7 @@ import { AudioSys } from './core/audio';
 import { device } from './core/device';
 import { Input } from './core/input';
 import { Loop } from './core/loop';
+import { PerfGovernor } from './core/perf';
 import { Physics } from './core/physics';
 import { Renderer } from './core/renderer';
 import { SaveStore, type Settings } from './core/save';
@@ -24,6 +25,7 @@ import { Traffic } from './world/traffic';
 import { FONT } from './world/textures';
 
 type AppState = 'loading' | 'title' | 'play';
+const FAR_AWAY = new THREE.Vector3(0, 50, 0);
 
 /**
  * App: boots the engine, builds the barangay, and runs the state machine
@@ -33,7 +35,7 @@ class App {
   private canvas = document.getElementById('game') as HTMLCanvasElement;
   private ui = document.getElementById('ui') as HTMLElement;
   private save = new SaveStore(device.forceQuality ?? 'high');
-  private r = new Renderer(this.canvas, this.save.data.settings.quality);
+  private r = new Renderer(this.canvas, this.save.data.settings.quality, this.save.data.settings.glow);
   private input = new Input(this.canvas);
   private audio = new AudioSys();
   private loop = new Loop((dt, t) => this.tick(dt, t), () => !!this.games?.networked);
@@ -53,6 +55,10 @@ class App {
   private avatars!: Avatars;
   private ambient!: Ambient;
   private traffic!: Traffic;
+  private perf = new PerfGovernor(
+    (fx) => this.applyPerf(fx),
+    () => this.r.gpuMs >= 0 && this.r.gpuMs < 7 && this.loop.cpuMs < 7,
+  );
 
   private state: AppState = 'loading';
   private paused = false;
@@ -122,6 +128,7 @@ class App {
     this.avatars = new Avatars(scene, this.blobs, this.audio);
     this.ambient = new Ambient(scene, this.world.lampHeads, q);
     this.traffic = new Traffic(scene, this.blobs, this.audio);
+    this.perf.setEnabled(this.save.data.settings.autoFps);
     this.games = new GameManager(
       {
         scene,
@@ -215,8 +222,22 @@ class App {
     this.input.requestLock();
   }
 
+  /** Auto FPS level changed: resolution, bloom, clouds + fireflies. */
+  private applyPerf(fx: { bloom: boolean; resScale: number; extras: boolean }): void {
+    this.r.setPerf(fx.resScale, fx.bloom);
+    this.sky?.setExtras(fx.extras);
+    this.ambient?.setVisible(fx.extras);
+  }
+
   private applySettings(s: Settings): void {
+    if (s.autoFps !== this.perf.enabled) this.perf.setEnabled(s.autoFps);
+    if (s.glow !== this.r.glow) {
+      this.r.glow = s.glow;
+      this.r.setQuality(this.r.quality);
+    }
+    if (!s.showFps && !device.showFps) this.hud.setFps(null);
     if (s.quality !== this.r.quality) {
+      this.perf.reset();
       this.r.setQuality(s.quality);
       (this.r.scene.fog as THREE.FogExp2).density = s.quality === 'high' ? 0.022 : 0.026;
     }
@@ -305,14 +326,17 @@ class App {
     if (this.state !== 'loading') {
       this.world.update(dt, t);
       this.ambient.update(t, this.r.renderer.getPixelRatio());
-      this.traffic.update(dt, this.state === 'play' ? this.player.position : cam.position.clone().setY(50));
+      this.traffic.update(dt, this.state === 'play' ? this.player.position : FAR_AWAY);
       this.lighting.update(dt, this.state === 'play' ? this.player.position : cam.position);
       this.blobs.update();
       this.sky.update(cam, t);
       this.r.render();
-      if (device.showFps) {
+      if (!this.paused) this.perf.frame(this.loop.rawDt);
+      if (device.showFps || this.save.data.settings.showFps) {
         const info = this.r.renderer.info.render;
-        this.hud.setFps(`${this.loop.fps.toFixed(0)} fps  ${info.calls} calls  ${(info.triangles / 1000).toFixed(1)}k tris`);
+        const auto = this.perf.enabled ? `  auto L${this.perf.level}` : '';
+        const gpu = this.r.gpuMs >= 0 ? `  gpu ${this.r.gpuMs.toFixed(1)}ms` : '';
+        this.hud.setFps(`${this.loop.fps.toFixed(0)} fps  cpu ${this.loop.cpuMs.toFixed(1)}ms${gpu}  ${info.calls} calls  ${(info.triangles / 1000).toFixed(1)}k tris${auto}`);
         if (this.state === 'title') this.hud.show(true);
       }
     }

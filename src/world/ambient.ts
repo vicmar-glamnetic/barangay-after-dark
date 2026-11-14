@@ -79,7 +79,7 @@ export class Ambient {
           gl_Position = projectionMatrix * mv;
           float fade = smoothstep(45.0, 18.0, -mv.z);
           vGlow *= fade;
-          gl_PointSize = data.z * (kind < 0.5 ? 85.0 : 22.0) * pixelRatio / max(1.5, -mv.z);
+          gl_PointSize = min(40.0 * pixelRatio, data.z * (kind < 0.5 ? 85.0 : 22.0) * pixelRatio / max(1.5, -mv.z));
         }`,
       fragmentShader: /* glsl */ `
         varying float vGlow;
@@ -97,6 +97,10 @@ export class Ambient {
     this.points.frustumCulled = false;
     this.points.renderOrder = 4;
     scene.add(this.points);
+  }
+
+  setVisible(v: boolean): void {
+    this.points.visible = v;
   }
 
   update(t: number, pixelRatio: number): void {

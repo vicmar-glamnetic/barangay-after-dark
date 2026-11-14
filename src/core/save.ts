@@ -13,6 +13,12 @@ export interface Settings {
   quality: Quality;
   /** Master volume 0 to 1. */
   volume: number;
+  /** Auto FPS governor on (lowers effects/resolution when the frame rate drops). */
+  autoFps: boolean;
+  /** Show the FPS counter. */
+  showFps: boolean;
+  /** Bloom glow (desktop High only). Off by default: it costs ~4-7 ms per frame. */
+  glow: boolean;
 }
 
 export interface SaveData {
@@ -50,7 +56,7 @@ export class SaveStore {
       unlocked: 1,
       best: {},
       plays: {},
-      settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8 },
+      settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false },
     };
   }
 
@@ -74,6 +80,9 @@ export class SaveStore {
       d.settings.invertY = s.invertY === true;
       d.settings.quality = s.quality === 'low' || s.quality === 'high' ? s.quality : this.defaultQuality;
       d.settings.volume = num(s.volume, 0.8, 0, 1);
+      d.settings.autoFps = s.autoFps !== false;
+      d.settings.showFps = s.showFps === true;
+      d.settings.glow = s.glow === true;
     }
     return d;
   }

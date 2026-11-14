@@ -4,6 +4,11 @@ import { radialTexture } from './textures';
 interface Item {
   obj: THREE.Object3D;
   size: number;
+  // cached ground height (raycast only when the object moves)
+  lx: number;
+  lz: number;
+  ly: number;
+  gy: number;
 }
 
 /**
@@ -35,7 +40,7 @@ export class BlobShadows {
   }
 
   add(obj: THREE.Object3D, size: number): () => void {
-    const it = { obj, size };
+    const it: Item = { obj, size, lx: NaN, lz: NaN, ly: NaN, gy: 0 };
     this.items.add(it);
     return () => this.items.delete(it);
   }
@@ -46,7 +51,13 @@ export class BlobShadows {
       if (!it.obj.visible || !it.obj.parent) continue;
       if (i >= this.mesh.instanceMatrix.count) break;
       it.obj.getWorldPosition(this.p);
-      const gy = this.groundAt(this.p.x, this.p.z, this.p.y + 0.3);
+      if (Math.abs(this.p.x - it.lx) > 0.05 || Math.abs(this.p.z - it.lz) > 0.05 || Math.abs(this.p.y - it.ly) > 0.2 || it.lx !== it.lx) {
+        it.gy = this.groundAt(this.p.x, this.p.z, this.p.y + 0.3);
+        it.lx = this.p.x;
+        it.lz = this.p.z;
+        it.ly = this.p.y;
+      }
+      const gy = it.gy;
       const h = Math.max(0, this.p.y - gy);
       const k = it.size * (1 - Math.min(0.5, h * 0.25));
       this.p.y = gy + 0.025;

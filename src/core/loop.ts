@@ -4,6 +4,10 @@
  */
 export class Loop {
   fps = 60;
+  /** Unclamped delta of the last frame (for the Auto FPS governor). */
+  rawDt = 1 / 60;
+  /** CPU time spent in the last tick, ms (render submission included). */
+  cpuMs = 0;
   private last = 0;
   private raf = 0;
   private running = false;
@@ -50,6 +54,7 @@ export class Loop {
     let dt = (now - this.last) / 1000;
     this.last = now;
     if (!(dt > 0)) dt = 1 / 60;
+    this.rawDt = dt;
     dt = Math.min(dt, 1 / 20);
 
     this.frames++;
@@ -59,6 +64,8 @@ export class Loop {
       this.frames = 0;
       this.fpsTime = 0;
     }
+    const t0 = performance.now();
     this.tick(dt, now / 1000);
+    this.cpuMs = this.cpuMs * 0.9 + (performance.now() - t0) * 0.1;
   };
 }

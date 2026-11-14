@@ -1,6 +1,7 @@
 import type { SaveStore, Settings } from '../core/save';
 import type { GameResult } from '../games/types';
 import { cleanCode, sanitizeName, type Session } from '../net/session';
+import { device } from '../core/device';
 import { copyText, el, onTap } from './dom';
 
 type Kind = 'none' | 'pause' | 'settings' | 'end' | 'game' | 'join' | 'lobby' | 'busy';
@@ -192,6 +193,18 @@ export class Menus {
       el('label', {}, el('span', { text: 'Quality' }), seg([
         ['Low', () => s.quality === 'low', () => (s.quality = 'low')],
         ['High', () => s.quality === 'high', () => (s.quality = 'high')],
+      ])),
+      device.isMobile ? null : el('label', {}, el('span', { text: 'Glow (mabigat sa GPU)' }), seg([
+        ['Off', () => !s.glow, () => (s.glow = false)],
+        ['On', () => s.glow, () => (s.glow = true)],
+      ])),
+      el('label', {}, el('span', { text: 'Auto FPS' }), seg([
+        ['Off', () => !s.autoFps, () => (s.autoFps = false)],
+        ['On', () => s.autoFps, () => (s.autoFps = true)],
+      ])),
+      el('label', {}, el('span', { text: 'Ipakita ang FPS' }), seg([
+        ['Off', () => !s.showFps, () => (s.showFps = false)],
+        ['On', () => s.showFps, () => (s.showFps = true)],
       ])),
       el('label', {}, el('span', { text: 'Volume' }), vol),
       el('div.btns', {}, this.button('Balik', '', back), reset),
