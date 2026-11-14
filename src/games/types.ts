@@ -9,6 +9,7 @@ import type { MobileControls } from '../ui/mobileControls';
 import type { Overlays } from '../ui/overlays';
 import type { BlobShadows } from '../world/shadows';
 import type { KidPlacement } from '../world/npcs';
+import type { Avatars } from '../net/avatars';
 
 /** What a finished mini-game reports back to the manager. */
 export interface GameResult {
@@ -37,6 +38,8 @@ export interface GameContext {
   touch: MobileControls;
   overlays: Overlays;
   blobs: BlobShadows;
+  /** Other players in the lobby (multiplayer only). */
+  avatars: Avatars;
   isTouch: () => boolean;
   groundAt: (x: number, z: number) => number;
   /** Call once when the game is over. The manager shows the end card. */

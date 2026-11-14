@@ -8,6 +8,7 @@ import { Physics } from './core/physics';
 import { Renderer } from './core/renderer';
 import { SaveStore, type Settings } from './core/save';
 import { GameManager } from './games/gameManager';
+import { Avatars } from './net/avatars';
 import { Player } from './player/controller';
 import { Hand } from './player/hand';
 import { Hud } from './ui/hud';
@@ -33,7 +34,7 @@ class App {
   private r = new Renderer(this.canvas, this.save.data.settings.quality);
   private input = new Input(this.canvas);
   private audio = new AudioSys();
-  private loop = new Loop((dt, t) => this.tick(dt, t));
+  private loop = new Loop((dt, t) => this.tick(dt, t), () => !!this.games?.networked);
   private overlays: Overlays;
   private hud: Hud;
   private touch: MobileControls;
@@ -47,6 +48,7 @@ class App {
   private player!: Player;
   private hand!: Hand;
   private games!: GameManager;
+  private avatars!: Avatars;
 
   private state: AppState = 'loading';
   private paused = false;
@@ -60,7 +62,7 @@ class App {
       onStart: () => this.startPlay(),
       onResume: () => this.resume(),
       onQuitGame: () => {
-        this.games.quit();
+        this.games.quitMidGame();
         this.resume();
       },
       onSettings: (s) => this.applySettings(s),
@@ -113,6 +115,7 @@ class App {
     this.blobs = new BlobShadows(scene, (x, z, fromY) => this.physics.groundAt(x, z, fromY));
     this.player = new Player(this.physics, this.r.camera, this.input, this.save.data.settings, this.audio);
     this.hand = new Hand(this.r.handScene);
+    this.avatars = new Avatars(scene, this.blobs, this.audio);
     this.games = new GameManager(
       {
         scene,
@@ -126,20 +129,25 @@ class App {
         touch: this.touch,
         overlays: this.overlays,
         blobs: this.blobs,
+        avatars: this.avatars,
         isTouch: () => this.input.usingTouch,
         groundAt,
       },
       this.save,
       this.menus,
-      (open) => {
-        if (open) {
-          this.input.clearAll();
-          this.input.exitLock();
-          this.touch.setVisible(false);
-        } else {
-          this.touch.setVisible(this.input.usingTouch);
-          this.input.requestLock();
-        }
+      {
+        onModal: (open) => {
+          if (open) {
+            this.input.clearAll();
+            this.input.exitLock();
+            this.touch.setVisible(false);
+          } else {
+            this.paused = false;
+            this.input.enabled = true;
+            this.touch.setVisible(this.input.usingTouch);
+            this.input.requestLock();
+          }
+        },
       },
     );
     const sp = this.world.spawn;
@@ -179,7 +187,18 @@ class App {
     this.input.enabled = false;
     this.input.exitLock();
     this.touch.setVisible(false);
-    this.menus.showPause(this.games.playing);
+    this.menus.showPause(this.games.playing, {
+      inLobby: !!this.games.session,
+      inNetGame: this.games.networked,
+      onJoin: () => {
+        this.paused = false;
+        this.games.showJoin();
+      },
+      onLobby: () => {
+        this.paused = false;
+        this.games.showLobby();
+      },
+    });
   }
 
   private resume(): void {
@@ -241,6 +260,7 @@ class App {
 
     if (this.input.pausePressed && this.state === 'play') {
       if (this.paused) this.resume();
+      else if (this.menus.kind === 'game' || this.menus.kind === 'join' || this.menus.kind === 'lobby') this.games.closeMenu();
       else if (!this.menus.isOpen) this.pause();
     }
 
@@ -250,16 +270,27 @@ class App {
       const a = this.titleT * 0.045 + 2.2;
       cam.position.set(Math.cos(a) * 25, 11 + Math.sin(this.titleT * 0.2) * 1.5, 3 + Math.sin(a) * 25);
       cam.lookAt(0, 1.5, 3);
-      this.games.update(dt, t, cam.position, false);
+      this.games.update(dt, t, cam.position, false, false);
     } else if (this.state === 'play') {
       const controls = !this.paused && !this.menus.isOpen;
-      if (!this.paused) {
+      // Multiplayer games keep running while one player has a menu open.
+      const simulate = !this.paused || this.games.networked;
+      if (simulate) {
         if (controls) this.player.update(dt);
-        this.games.update(dt, t, cam.position, controls);
+        this.games.update(dt, t, cam.position, controls, simulate);
         this.physics.step(dt);
         this.player.syncCamera();
         this.games.postPhysics(dt);
       }
+      const s = this.games.session;
+      if (s) {
+        const p = this.player.position;
+        const anim = this.games.active?.localAnim() ?? (this.player.speed > 0.5 ? 1 : 0);
+        s.setLocalPose(p.x, p.y, p.z, this.player.yaw, anim);
+        s.update(dt);
+      }
+      this.avatars.setVisible(!!s && this.games.networked);
+      this.avatars.update(dt, t, s);
       this.hand.update(dt, this.player.speed);
       this.hud.setClickHint(controls && !this.input.usingTouch && !this.input.locked);
       this.audio.updateListener(cam);

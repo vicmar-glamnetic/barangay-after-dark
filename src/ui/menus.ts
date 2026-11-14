@@ -1,6 +1,10 @@
 import type { SaveStore, Settings } from '../core/save';
 import type { GameResult } from '../games/types';
+import { cleanCode, sanitizeName, type Session } from '../net/session';
 import { copyText, el, onTap } from './dom';
+
+type Kind = 'none' | 'pause' | 'settings' | 'end' | 'game' | 'join' | 'lobby' | 'busy';
+const NAME_KEY = 'barangay-after-dark:name';
 
 export interface MenuCallbacks {
   onStart: () => void;
@@ -20,7 +24,9 @@ export class Menus {
   private titleBtn: HTMLButtonElement;
   private titleMeta: HTMLElement;
   private layer = el('div.screen.dim.interactive.hidden');
-  private openKind: 'none' | 'pause' | 'settings' | 'end' = 'none';
+  private openKind: Kind = 'none';
+  private lobbyRefresh: (() => void) | null = null;
+  private name = '';
 
   constructor(private parent: HTMLElement, private save: SaveStore, private cb: MenuCallbacks, private isTouch: () => boolean) {
     this.titleBtn = el('button.btn.start-btn', { text: 'Naglo-load...' });
@@ -74,12 +80,14 @@ export class Menus {
 
   close(): void {
     this.openKind = 'none';
+    this.lobbyRefresh = null;
     this.layer.classList.add('hidden');
     this.layer.replaceChildren();
   }
 
-  private open(kind: 'pause' | 'settings' | 'end', card: HTMLElement): void {
+  private open(kind: Exclude<Kind, 'none'>, card: HTMLElement): void {
     this.openKind = kind;
+    this.lobbyRefresh = null;
     this.layer.replaceChildren(card);
     this.layer.classList.remove('hidden');
   }
@@ -95,7 +103,7 @@ export class Menus {
 
   // --------------------------------------------------------------- pause
 
-  showPause(inGame: boolean): void {
+  showPause(inGame: boolean, net: { inLobby: boolean; inNetGame: boolean; onJoin: () => void; onLobby: () => void } | null = null): void {
     const help = this.isTouch()
       ? '<b>Kaliwa:</b> joystick para lumakad (itulak nang todo para tumakbo)<br><b>Kanan:</b> i-drag para tumingin<br><b>Laro!</b> para makipaglaro, <b>Bato/Sipa</b> para sa aksyon'
       : '<b>WASD</b> lakad, <b>Shift</b> takbo, <b>Space</b> talon<br><b>Mouse</b> tingin, <b>Left click</b> bato o sipa<br><b>E</b> makipaglaro, <b>Esc</b> pause';
@@ -109,8 +117,11 @@ export class Menus {
         {},
         this.button('Tuloy', '', () => this.cb.onResume()),
         this.button('Settings', '.alt', () => this.showSettings(() => this.showPause(inGame))),
-        inGame ? this.button('Balik sa barangay', '.alt', () => this.cb.onQuitGame()) : null,
+        inGame ? this.button(net?.inNetGame ? 'Umalis sa laro' : 'Balik sa barangay', '.alt', () => this.cb.onQuitGame()) : null,
+        !inGame && net && !net.inLobby ? this.button('Sumali sa lobby', '.alt', net.onJoin) : null,
+        !inGame && net?.inLobby ? this.button('Lobby', '.alt', net.onLobby) : null,
       ),
+      net?.inNetGame ? el('p', { text: 'Tuloy pa rin ang laro habang naka-pause.' }) : null,
       el('div.help', { html: help }),
     );
     this.open('pause', card);
@@ -190,7 +201,11 @@ export class Menus {
 
   // --------------------------------------------------------------- end card
 
-  showEnd(r: GameResult, extra: { best: number; isBest: boolean; unlocked?: string }, onRetry: () => void, onBack: () => void): void {
+  showEnd(
+    r: GameResult,
+    extra: { best: number; isBest: boolean; unlocked?: string },
+    o: { onRetry: (() => void) | null; retryNote?: string; onBack: () => void; backLabel: string },
+  ): void {
     const copyBtn = this.button('Copy score', '.alt', async () => {
       const ok = await copyText(r.shareText);
       copyBtn.textContent = ok ? 'Nakopya na!' : 'Hindi ma-copy';
@@ -207,8 +222,164 @@ export class Menus {
         el('div', { text: `+${r.points} Tropa Points` }),
         el('div', { text: extra.isBest ? 'Bagong best score!' : `Best: ${extra.best}` }),
         extra.unlocked ? el('div', { text: `Na-unlock: ${extra.unlocked}!` }) : null),
-      el('div.btns', {}, this.button('Ulit?', '', onRetry), this.button('Balik sa barangay', '.alt', onBack), copyBtn),
+      el('div.btns', {}, o.onRetry ? this.button('Ulit?', '', o.onRetry) : null, this.button(o.backLabel, '.alt', o.onBack), copyBtn),
+      o.retryNote ? el('p', { text: o.retryNote }) : null,
     );
     this.open('end', card);
+  }
+
+  // --------------------------------------------------------------- multiplayer
+
+  /** Player name for lobbies (remembered on this device). */
+  get playerName(): string {
+    if (!this.name) {
+      try {
+        this.name = localStorage.getItem(NAME_KEY) ?? '';
+      } catch {
+        /* ignore */
+      }
+      if (!this.name) this.name = 'Bata' + Math.floor(100 + Math.random() * 900);
+    }
+    return this.name;
+  }
+
+  set playerName(v: string) {
+    this.name = sanitizeName(v);
+    try {
+      localStorage.setItem(NAME_KEY, this.name);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private nameField(): HTMLElement {
+    const input = el('input.text-in', { attrs: { maxlength: '14', value: this.playerName, 'aria-label': 'Pangalan', autocomplete: 'off' } }) as HTMLInputElement;
+    input.value = this.playerName;
+    input.addEventListener('change', () => (this.playerName = input.value));
+    input.addEventListener('blur', () => (this.playerName = input.value));
+    return el('label', {}, el('span', { text: 'Pangalan mo' }), input);
+  }
+
+  /** Choice card at a game spot: solo, create a lobby, or join one. */
+  showGameMenu(o: {
+    name: string;
+    canSolo: boolean;
+    lockedMsg: string;
+    inLobby: boolean;
+    onSolo: () => void;
+    onCreate: () => void;
+    onJoin: () => void;
+    onLobby: () => void;
+    onClose: () => void;
+  }): void {
+    const card = el(
+      'div.card.settings',
+      {},
+      el('h2', { text: o.name }),
+      el('p', { text: 'Mag-isa o kasama ang tropa?' }),
+      o.lockedMsg ? el('p', { text: o.lockedMsg }) : null,
+      this.nameField(),
+      el(
+        'div.btns.col',
+        {},
+        o.canSolo ? this.button('Mag-isa', '', o.onSolo) : null,
+        o.inLobby ? this.button('Laruin ito sa lobby', '.alt', o.onCreate) : this.button('Gumawa ng lobby', '.alt', o.onCreate),
+        o.inLobby ? null : this.button('Sumali gamit ang code', '.alt', o.onJoin),
+        this.button('Isara', '.alt.small', o.onClose),
+      ),
+    );
+    this.open('game', card);
+  }
+
+  showBusy(text: string): void {
+    this.open('busy', el('div.card', {}, el('h2', { text: 'Sandali...' }), el('p', { text }), el('div.loading-bar.center', {}, el('i'))));
+  }
+
+  showMessage(text: string, onOk: () => void): void {
+    this.open('busy', el('div.card', {}, el('h2.bad', { text: 'Ay!' }), el('p', { text }), el('div.btns', {}, this.button('Sige', '', onOk))));
+  }
+
+  /** Enter a 4-letter room code. onJoin resolves to an error message or null. */
+  showJoin(onJoin: (code: string) => Promise<string | null>, onBack: () => void): void {
+    const input = el('input.text-in.code-in', { attrs: { maxlength: '4', placeholder: 'KAPE', autocapitalize: 'characters', autocomplete: 'off', 'aria-label': 'Code' } }) as HTMLInputElement;
+    const err = el('p.err');
+    input.addEventListener('input', () => (input.value = cleanCode(input.value)));
+    const go = async () => {
+      const code = cleanCode(input.value);
+      if (code.length !== 4) {
+        err.textContent = 'Apat na letra ang code.';
+        return;
+      }
+      joinBtn.disabled = true;
+      joinBtn.textContent = 'Kumokonekta...';
+      const msg = await onJoin(code);
+      if (msg && this.openKind === 'join') {
+        err.textContent = msg;
+        joinBtn.disabled = false;
+        joinBtn.textContent = 'Sumali';
+      }
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') go();
+    });
+    const joinBtn = this.button('Sumali', '', go);
+    const card = el(
+      'div.card.settings',
+      {},
+      el('h2', { text: 'Sumali sa lobby' }),
+      el('p', { text: 'I-type ang 4 na letrang code na binigay ng tropa mo.' }),
+      input,
+      err,
+      this.nameField(),
+      el('div.btns', {}, joinBtn, this.button('Balik', '.alt', onBack)),
+    );
+    this.open('join', card);
+    setTimeout(() => input.focus(), 50);
+  }
+
+  /** Lobby roster with the room code. Refreshes live as people join and leave. */
+  showLobby(s: Session, gameName: (id: string) => string, o: { onStart: () => void; onLeave: () => void; onClose: () => void }): void {
+    const list = el('div.roster');
+    const status = el('p');
+    const startBtn = this.button('Simulan!', '', o.onStart);
+    const code = el('div.code', { text: s.code });
+    const copyBtn = this.button('Copy code', '.alt.small', async () => {
+      const ok = await copyText(`Laro tayo sa Barangay After Dark! Code: ${s.code}  ${location.href.split('?')[0]}`);
+      copyBtn.textContent = ok ? 'Nakopya!' : 'Hindi ma-copy';
+      setTimeout(() => (copyBtn.textContent = 'Copy code'), 1500);
+    });
+    const title = el('h2');
+    const render = () => {
+      title.textContent = `Lobby: ${gameName(s.gameId)}`;
+      list.replaceChildren(
+        ...s.players.map((p) =>
+          el('div.row', {}, el('i', { attrs: { style: `background:#${p.color.toString(16).padStart(6, '0')}` } }),
+            el('span', { text: p.name + (p.id === s.selfId ? ' (ikaw)' : '') + (p.id === s.hostId ? '  host' : '') })),
+        ),
+      );
+      status.textContent = s.isHost
+        ? s.players.length < 2
+          ? 'Hinihintay ang tropa... I-share ang code. (Pwede ring simulan mag-isa.)'
+          : `${s.players.length} na kayo. Simulan na!`
+        : 'Hinihintay na simulan ng host...';
+    };
+    render();
+    const card = el(
+      'div.card',
+      {},
+      title,
+      el('p', { text: 'Code ng lobby' }),
+      code,
+      el('div.btns', {}, copyBtn),
+      list,
+      status,
+      el('div.btns', {}, s.isHost ? startBtn : null, this.button('Isara', '.alt', o.onClose), this.button('Umalis sa lobby', '.danger.small', o.onLeave)),
+    );
+    this.open('lobby', card);
+    this.lobbyRefresh = render;
+  }
+
+  refreshLobby(): void {
+    this.lobbyRefresh?.();
   }
 }

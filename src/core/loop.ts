@@ -10,7 +10,27 @@ export class Loop {
   private frames = 0;
   private fpsTime = 0;
 
-  constructor(private tick: (dt: number, time: number) => void) {}
+  private bgTimer = 0;
+
+  /**
+   * @param background When this returns true and the tab is hidden, keep
+   * ticking at ~10 Hz with setInterval (browsers pause rAF in hidden tabs).
+   * Used so a multiplayer host does not freeze the game for everyone.
+   */
+  constructor(private tick: (dt: number, time: number) => void, private background: () => boolean = () => false) {
+    document.addEventListener('visibilitychange', () => {
+      clearInterval(this.bgTimer);
+      if (document.hidden && this.running) {
+        this.bgTimer = window.setInterval(() => {
+          if (!this.background()) return;
+          const now = performance.now();
+          const dt = Math.min((now - this.last) / 1000, 0.25);
+          this.last = now;
+          this.tick(dt, now / 1000);
+        }, 100);
+      } else this.last = performance.now();
+    });
+  }
 
   start(): void {
     if (this.running) return;

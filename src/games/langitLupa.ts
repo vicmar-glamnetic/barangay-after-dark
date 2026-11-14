@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BaseGame } from './baseGame';
+import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
 
 /*
@@ -37,4 +37,5 @@ export class LangitLupa extends BaseGame {
   start(): void {}
   update(): void {}
   stop(): void {}
+  protected finishMine(_m: EndRow): void {}
 }

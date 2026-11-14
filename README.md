@@ -52,6 +52,24 @@ Settings (in the pause menu) include look sensitivity, invert Y, Low/High qualit
 
 Games unlock in order. Progress, best scores and Tropa Points are saved in `localStorage`.
 
+## Multiplayer (lobbies)
+
+Every game except Langit-Lupa can be played solo or in a lobby of up to 6 players.
+
+- At a game spot press **E** / **Laro!**, then choose **Mag-isa** (solo), **Gumawa ng lobby** (you get a 4-letter code like `KAPE`), or **Sumali gamit ang code**. You can also join from the pause menu from anywhere.
+- The lobby creator is the **host**. They pick the game (walk to another spot and choose "Laruin ito sa lobby") and press **Simulan!**. Everyone is pulled into the game; after it ends, the host can press **Ulit?** for everyone.
+- **Tumbang Preso:** everyone throws at the same can and the taya chases whoever is past the line.
+- **Sipa:** side-by-side streak battle with a live leaderboard.
+- **Patintero:** everyone runs the grid against the AI taggers.
+- **Taguan:** real hide and seek. One player seeks (rotates every round), the rest hide, and AI kids fill in up to 4 hiders. Hiders' name tags are hidden from the seeker.
+
+How it works: peer-to-peer WebRTC through [PeerJS](https://peerjs.com/). The free PeerJS cloud server only introduces players; game traffic goes directly between devices. The host runs the game logic and broadcasts state at 15 Hz; others send their position and actions. Code lives in `src/net/` (`session.ts`, `avatars.ts`) and each game's `onHostMsg` / `onClientMsg`.
+
+Limits to know:
+- If the host leaves, the lobby ends. A guest who leaves mid-game also leaves the lobby.
+- A few strict networks (some mobile carriers, corporate Wi-Fi) block direct WebRTC connections. There is no relay (TURN) server, so those players cannot join.
+- If the host switches away from the tab, their phone may slow the game down for everyone. Keep the host's screen on.
+
 ## Project structure
 
 ```
@@ -62,6 +80,7 @@ src/
   player/               first-person controller, view-model hand/leg, tsinelas model
   ui/                   HUD, menus, mobile controls, overlays, styles
   games/                gameManager + one module per street game
+  net/                  peer-to-peer lobby session and remote player avatars
 public/                 manifest, service worker, icons
 scripts/make-icons.mjs  dependency-free PNG icon generator
 ```

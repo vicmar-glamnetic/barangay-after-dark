@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { BaseGame } from './baseGame';
+import type { GameData } from '../net/session';
+import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
 
 /*
@@ -10,6 +11,10 @@ import type { HubLayout } from './types';
  * gravity a little stronger, so the rhythm gets faster. Miss and it falls.
  * Score = kick streak. Kicking too early whiffs and costs a short cooldown,
  * so mashing does not work.
+ *
+ * Multiplayer: everyone kicks their own sipa side by side in front of the
+ * store. Each client simulates its own sipa and reports its streak; the host
+ * keeps the leaderboard and ends the game when everyone has dropped theirs.
  */
 
 const SPOT = new THREE.Vector3(6, 0.12, -4.5);
@@ -57,6 +62,12 @@ export class Sipa extends BaseGame {
   private dropT = 0;
   private thud = false;
   private cheerT = 0;
+  private spotX = SPOT.x;
+  private reported = false;
+  private board: [string, number, boolean][] = [];
+  // host
+  private table = new Map<string, { n: number; p: number; done: boolean }>();
+  private ended = false;
 
   protected onAttach(): void {
     const { scene } = this.ctx;
@@ -88,7 +99,16 @@ export class Sipa extends BaseGame {
 
   start(): void {
     const { player, hand, hud, touch, blobs, isTouch } = this.ctx;
-    player.teleport(SPOT.x, SPOT.y, SPOT.z, 0, -0.3);
+    const n = this.roster().length;
+    this.spotX = SPOT.x + (this.slotOf(this.selfId) - (n - 1) / 2) * 1.7;
+    player.teleport(this.spotX, SPOT.y, SPOT.z, 0, -0.3);
+    this.reported = false;
+    this.board = [];
+    if (this.isHost) {
+      this.ended = false;
+      this.table.clear();
+      for (const id of this.roster()) this.table.set(id, { n: 0, p: 0, done: false });
+    }
     player.moveEnabled = false;
     player.lookEnabled = false;
     hand.setHolding(false);
@@ -111,7 +131,7 @@ export class Sipa extends BaseGame {
     touch.setJumpVisible(false);
     this.group.kids.forEach((k) => {
       k.mode = 'idle';
-      k.face(SPOT.x, SPOT.z - AHEAD);
+      k.face(this.spotX, SPOT.z - AHEAD);
     });
     this.place();
   }
@@ -179,13 +199,20 @@ export class Sipa extends BaseGame {
           audio.play('thud');
         }
         this.dropT -= dt;
-        if (this.dropT <= 0) this.end();
+        if (this.dropT <= 0 && !this.reported) {
+          this.reported = true;
+          this.report(true);
+          if (this.multiplayer) hud.setObjective('Hinihintay ang iba...');
+        }
         break;
 
       case 'done':
         return;
     }
     this.place(t);
+    if (this.isHost) this.hostCheck();
+    if (this.multiplayer && this.board.length > 1)
+      hud.setStat(this.board.slice(0, 5).map(([id, n, done]) => `${this.nameOf(id)} ${n}${done ? '' : '*'}`).join('   '));
   }
 
   private doKick(err: number): void {
@@ -202,6 +229,7 @@ export class Sipa extends BaseGame {
     audio.play('kick', { vol: 1.2 });
     if (perfect) audio.play('perfect');
     hud.setBig(String(this.streak));
+    this.report(false);
     if (this.streak % 5 === 0) {
       hud.toast(`${this.streak}! Galing!`, 'good', 900);
       audio.play('cheer');
@@ -212,7 +240,7 @@ export class Sipa extends BaseGame {
 
   /** Position the sipa and the timing rings in front of the player. */
   private place(t = 0): void {
-    const cx = SPOT.x + this.x;
+    const cx = this.spotX + this.x;
     const cz = SPOT.z - AHEAD;
     this.sipa.position.set(cx, this.y, cz);
     this.sipa.rotation.set(Math.sin(t * 7) * 0.25, t * 5, Math.cos(t * 6) * 0.2);
@@ -226,17 +254,47 @@ export class Sipa extends BaseGame {
     this.approach.visible = this.phase === 'play' || this.phase === 'intro';
   }
 
-  private end(): void {
+  /** Tell the host our streak (and whether our sipa has dropped). */
+  private report(done: boolean): void {
+    this.toHost({ k: 'st', n: this.streak, p: this.perfects, done });
+  }
+
+  protected onHostMsg(from: string, d: GameData): void {
+    if (d.k !== 'st' || this.ended) return;
+    this.table.set(from, { n: Number(d.n), p: Number(d.p), done: !!d.done });
+    this.toAll({ k: 'b', rows: [...this.table].map(([id, r]) => [id, r.n, r.done]) });
+  }
+
+  protected onClientMsg(d: GameData): void {
+    if (d.k === 'b') this.board = (d.rows as [string, number, boolean][]).slice().sort((a, b) => b[1] - a[1]);
+  }
+
+  private hostCheck(): void {
+    if (this.ended) return;
+    const ids = new Set(this.roster());
+    for (const id of [...this.table.keys()]) if (!ids.has(id)) this.table.delete(id);
+    if (![...this.table.values()].every((r) => r.done)) return;
+    this.ended = true;
+    const rows: EndRow[] = [...this.table].map(([id, r]) => ({
+      id,
+      score: r.n,
+      won: r.n >= 10,
+      lines: [`Perfect: ${r.p}`],
+    }));
+    this.endWith(rows);
+  }
+
+  protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
     this.phase = 'done';
-    const s = this.streak;
+    const s = mine.score;
     this.ctx.hud.setObjective('');
     this.ctx.finish({
       gameName: this.name,
       score: s,
       scoreLabel: 'sunod-sunod na sipa',
       points: s * 2 + this.perfects,
-      won: s >= 10,
-      lines: [`Perfect: ${this.perfects}`, s >= 10 ? 'Pang-barangay champion!' : 'Kaya mo pa yan! Abutin ang 10.'],
+      won,
+      lines: [...mine.lines, ...(ranking.length ? ranking : [s >= 10 ? 'Pang-barangay champion!' : 'Kaya mo pa yan! Abutin ang 10.'])],
       shareText: `Naka-${s} sipa ako sa Barangay After Dark!`,
     });
   }
