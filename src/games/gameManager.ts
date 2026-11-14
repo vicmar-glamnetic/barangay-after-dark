@@ -52,8 +52,9 @@ export class GameManager {
     return !!this.active?.net;
   }
 
+  /** Every implemented game is open from the start (no unlock gating). */
   isPlayable(i: number): boolean {
-    return this.games[i].implemented && i < this.save.data.unlocked;
+    return this.games[i].implemented;
   }
 
   gameById(id: string): BaseGame | undefined {
@@ -61,9 +62,8 @@ export class GameManager {
   }
 
   refreshLabels(): void {
-    this.games.forEach((g, i) => {
+    this.games.forEach((g) => {
       if (!g.implemented) g.group.setLabel(g.name, 'Soon!', '#9aa3c7');
-      else if (i >= this.save.data.unlocked) g.group.setLabel(g.name, 'Naka-lock', '#8d99ae');
       else {
         const best = this.save.data.best[g.id];
         g.group.setLabel(g.name, best !== undefined ? `Laro tayo!  Best ${best}` : 'Laro tayo!', g.layout.accent);
@@ -104,11 +104,9 @@ export class GameManager {
       touch.setInteractReady(false);
       return;
     }
-    const i = this.games.indexOf(best);
     const key = isTouch() ? undefined : 'E';
     if (!best.implemented) hud.setPrompt(`${best.name}: Soon! Abangan.`);
-    else if (this.isPlayable(i)) hud.setPrompt(`Laro tayo! ${best.name}`, key);
-    else hud.setPrompt(`${best.name}: naka-lock (pwede sumali sa lobby)`, key);
+    else hud.setPrompt(`Laro tayo! ${best.name}`, key);
     touch.setInteractReady(best.implemented);
 
     if (input.pressed('interact')) {
@@ -261,9 +259,8 @@ export class GameManager {
     const idx = this.games.indexOf(g);
     this.save.addPoints(r.points);
     const isBest = this.save.recordScore(g.id, r.score);
-    let unlocked: string | undefined;
-    const next = this.games[idx + 1];
-    if (next && this.save.unlockUpTo(idx + 2)) unlocked = next.implemented ? next.name : `${next.name} (Soon!)`;
+    const unlocked: string | undefined = undefined;
+    void idx;
     this.refreshLabels();
     this.ctx.hud.setPoints(this.save.data.tropaPoints);
     this.ctx.audio.play(r.won ? 'win' : 'lose');

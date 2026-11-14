@@ -48,13 +48,13 @@ Settings (in the pause menu) include look sensitivity, invert Y, Low/High qualit
 2. **Sipa** (done): kick the sipa when it drops into the ring. Every kick gets faster. Score = streak.
 3. **Patintero** (done): on the covered court. Cross all 5 lines to the far end and back. Each line tagger can only slide along its own line and only tags you while you are crossing it; the center-line tagger guards the middle. Do not step outside the grid. 3 lives, 90 seconds.
 4. **Taguan** (done): count to ten in the dark ("Isa... dalawa..."), then find the 4 hidden kids within 90 seconds. Giggles and footsteps are positional, so they get louder as you get closer, and the HUD says "Malamig / Malapit-lapit / Mainit na!". A kid is found when you are close, looking at them, and no wall is in the way.
-5. **Langit-Lupa** (soon): the kids, "Soon!" label and climbable crates are in the hub, and the planned design is in the module's header comment.
+5. **Langit-Lupa** (done): survive 60 seconds. Raised things are langit (safe), the ground is lupa. You cannot stay on one perch longer than 5 seconds (bawal tumambay). The taya walks around crates to reach you; 2 tayas in lobbies of 3+.
 
-Games unlock in order. Progress, best scores and Tropa Points are saved in `localStorage`.
+All games are open from the start. Progress, best scores and Tropa Points are saved in `localStorage`.
 
 ## Multiplayer (lobbies)
 
-Every game except Langit-Lupa can be played solo or in a lobby of up to 6 players.
+Every game can be played solo or in a lobby of up to 6 players.
 
 - At a game spot press **E** / **Laro!**, then choose **Mag-isa** (solo), **Gumawa ng lobby** (you get a 4-letter code like `KAPE`), or **Sumali gamit ang code**. You can also join from the pause menu from anywhere.
 - The lobby creator is the **host**. They pick the game (walk to another spot and choose "Laruin ito sa lobby") and press **Simulan!**. Everyone is pulled into the game; after it ends, the host can press **Ulit?** for everyone.

@@ -1,41 +1,496 @@
 import * as THREE from 'three';
+import type { GameData } from '../net/session';
+import { Kid } from '../world/npcs';
 import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
 
 /*
- * LANGIT-LUPA ("heaven-earth") (stub for v1, kids + "Soon!" label are live)
+ * LANGIT-LUPA ("heaven-earth"), solo or multiplayer.
  *
- * Planned design:
- * - Survive 60 seconds. Anything raised is "langit" (safe): crates, the bench,
- *   the low wall, drums, the kariton (all built in world/props.ts langitArea
- *   with colliders, so the player can already jump on them).
- * - Detect langit with player.position.y > SAFE_HEIGHT (ground is 0).
- * - The "it" kid chases on the ground and tags you if you are on the lupa.
- * - Rule from the street: you cannot stay on one langit for more than
- *   MAX_PERCH seconds, which forces the parkour.
+ * Survive 60 seconds. Anything raised is LANGIT (safe): crates, the bench,
+ * the low wall, the drums, the kariton. The ground is LUPA. The taya chases
+ * anyone on the ground. Street rule: bawal tumambay, you cannot stay on the
+ * same langit for more than MAX_PERCH seconds, after that the taya can tag
+ * you there too, so you have to keep hopping.
+ *
+ * Leaving the chalk boundary for more than 2 seconds = out.
+ * Score: 2 per second survived, +1 per hop to a new langit, +40 if you last
+ * the whole minute. Multiplayer: 2 tayas when 3 or more players.
+ *
+ * Network: the host runs the tayas and judges everyone from their reported
+ * position (feet height decides langit vs lupa).
  */
+
 export const SAFE_HEIGHT = 0.35;
 export const MAX_PERCH = 5;
+const TIME = 60;
+const BOUNDS = { minX: 18.6, maxX: 29.2, minZ: 5.6, maxZ: 16.6 };
+const TAG_DIST = 0.95;
+const OUT_GRACE = 2;
+const SNAP_HZ = 15;
+
+/** Obstacles in the arena (world XZ boxes) so the taya walks around them. */
+const BLOCKS: [number, number, number, number][] = [
+  // [minX, maxX, minZ, maxZ] built by world/props.ts langitArea (frame 23.5, 11)
+  [20.5, 21.5, 8.5, 9.5], [21.7, 22.7, 8.3, 9.3], [25.55, 26.65, 12.85, 13.95], [22.4, 25.6, 7.6, 8.0],
+  [22.3, 24.7, 11.9, 12.5], [19.78, 20.42, 12.28, 12.92], [20.48, 21.12, 13.08, 13.72], [26.0, 27.4, 9.0, 11.0],
+];
+/** Extra platforms this game adds (x, z, w, h, d) for longer hop chains. */
+const EXTRA: [number, number, number, number, number][] = [
+  [25.2, 15.4, 1.0, 0.8, 1.0],
+  [28.4, 8.0, 1.0, 1.2, 1.0],
+  [19.4, 15.2, 1.2, 0.6, 1.2],
+  [27.9, 14.4, 1.4, 0.5, 0.8],
+  [22.2, 15.6, 1.0, 0.7, 1.0],
+];
+/** Start perches, one per player. */
+const STARTS: [number, number][] = [[21, 9], [24, 7.8], [26.1, 13.4], [26.7, 10], [23.5, 12.2], [25.2, 15.4]];
+const TAYA_START: [number, number][] = [[19.3, 6.3], [28.8, 16.1]];
+
+type PState = 'ready' | 'play' | 'out';
+const PSTATES: PState[] = ['ready', 'play', 'out'];
+
+interface Part {
+  id: string;
+  state: PState;
+  survived: number;
+  hops: number;
+  perchT: number;
+  anchor: THREE.Vector3 | null;
+  outsideT: number;
+  vulnerableWarned: boolean;
+}
+
+interface Taya {
+  kid: Kid;
+  target: THREE.Vector3; // client smoothing target
+  speed: number;
+  /** When blocked by a crate: side-step direction (+1/-1) and how long to keep it. */
+  detour: number;
+  detourT: number;
+}
 
 export class LangitLupa extends BaseGame {
   readonly id = 'langitLupa';
   readonly name = 'Langit-Lupa';
-  readonly implemented = false;
+  readonly implemented = true;
   readonly where = 'sa mga kahon sa tabi ng court';
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(20.6, 0, 7.8),
     labelPos: new THREE.Vector3(23.5, 3.6, 10.5),
     accent: '#ff8c42',
     kids: [
+      { x: 22.6, z: 14.2, mode: 'idle' }, // the taya, on the ground
       { x: 21, z: 9, mode: 'cheer' }, // on the stacked crates
       { x: 26.1, z: 13.4, mode: 'wave' }, // on a crate
       { x: 23.5, z: 12.2, mode: 'idle' }, // on the bench
-      { x: 22.6, z: 14.2, mode: 'idle' }, // the "it", on the ground
     ],
   };
 
-  start(): void {}
-  update(): void {}
-  stop(): void {}
-  protected finishMine(_m: EndRow): void {}
+  private boundary!: THREE.Group;
+  private extras: Kid[] = [];
+  private tayas: Taya[] = [];
+  private running = false;
+
+  // client view
+  private time = TIME;
+  private me = { state: 'ready' as PState, perchLeft: MAX_PERCH, survived: 0, hops: 0 };
+  private board: [string, number, PState][] = [];
+  private readyT = 0;
+
+  // host
+  private parts = new Map<string, Part>();
+  private hostTime = TIME;
+  private hostReady = 0;
+  private hostDone = false;
+  private snapT = 0;
+
+  protected onAttach(): void {
+    const { scene, physics } = this.ctx;
+    // extra crates (permanent, so they are climbable in the hub too)
+    const wood = new THREE.MeshLambertMaterial({ color: 0x8a5a36 });
+    const rim = new THREE.MeshLambertMaterial({ color: 0x4e3320 });
+    for (const [x, z, w, h, d] of EXTRA) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wood);
+      m.position.set(x, h / 2, z);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(w + 0.03, 0.05, d + 0.03), rim);
+      top.position.set(x, h - 0.02, z);
+      scene.add(m, top);
+      physics.addBox(x, h / 2, z, w / 2, h / 2, d / 2);
+      BLOCKS.push([x - w / 2, x + w / 2, z - d / 2, z + d / 2]);
+    }
+    // chalk boundary (only visible during the game)
+    this.boundary = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffd6a5, transparent: true, opacity: 0.6, depthWrite: false, fog: false });
+    const w = BOUNDS.maxX - BOUNDS.minX, d = BOUNDS.maxZ - BOUNDS.minZ;
+    const cx = (BOUNDS.minX + BOUNDS.maxX) / 2, cz = (BOUNDS.minZ + BOUNDS.maxZ) / 2;
+    const edge = (x: number, z: number, ew: number, ed: number) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(ew, ed).rotateX(-Math.PI / 2), mat);
+      m.position.set(x, 0.03, z);
+      this.boundary.add(m);
+    };
+    edge(cx, BOUNDS.minZ, w, 0.1);
+    edge(cx, BOUNDS.maxZ, w, 0.1);
+    edge(BOUNDS.minX, cz, 0.1, d);
+    edge(BOUNDS.maxX, cz, 0.1, d);
+    this.boundary.visible = false;
+    scene.add(this.boundary);
+  }
+
+  // ================================================================== lifecycle
+
+  start(): void {
+    const { scene, blobs, hud, touch, player } = this.ctx;
+    const n = this.roster().length;
+    const tayaCount = this.multiplayer && n >= 3 ? 2 : 1;
+    const kids = [this.group.kids[0]];
+    while (kids.length < tayaCount) {
+      const k = new Kid();
+      scene.add(k.root);
+      k.addShadow(blobs);
+      this.extras.push(k);
+      kids.push(k);
+    }
+    this.tayas = kids.map((kid, i) => {
+      const [x, z] = TAYA_START[i];
+      kid.root.position.set(x, 0, z);
+      kid.mode = 'idle';
+      return { kid, target: new THREE.Vector3(x, 0, z), speed: 0, detour: 1, detourT: 0 };
+    });
+    // the other hub kids step outside the boundary and cheer
+    const spect: [number, number][] = [[18.2, 5.2], [29.4, 5.4], [18.1, 16.9]];
+    this.group.kids.slice(1).forEach((k, i) => {
+      const [x, z] = spect[i];
+      k.root.position.set(x, 0, z);
+      k.face(23.5, 11);
+      k.mode = 'cheer';
+    });
+
+    // start on our own perch
+    const [sx, sz] = STARTS[this.slotOf(this.selfId) % STARTS.length];
+    player.teleport(sx, this.ctx.physics.groundAt(sx, sz, 3) + 0.05, sz, Math.PI, -0.1);
+    player.moveEnabled = false;
+
+    this.boundary.visible = true;
+    this.running = true;
+    this.time = TIME;
+    this.readyT = 2;
+    this.me = { state: 'ready', perchLeft: MAX_PERCH, survived: 0, hops: 0 };
+    this.board = [];
+    touch.setActionLabel('Talon');
+    hud.setCrosshair(true);
+    hud.setObjective('Nasa LANGIT ka. Huwag kang mahuli sa LUPA!');
+
+    if (this.isHost) {
+      this.parts.clear();
+      for (const id of this.roster()) {
+        this.parts.set(id, { id, state: 'ready', survived: 0, hops: 0, perchT: 0, anchor: null, outsideT: 0, vulnerableWarned: false });
+      }
+      this.hostTime = TIME;
+      this.hostReady = 2;
+      this.hostDone = false;
+    }
+  }
+
+  stop(): void {
+    for (const k of this.extras) k.dispose();
+    this.extras = [];
+    this.tayas = [];
+    this.parts.clear();
+    this.boundary.visible = false;
+    this.running = false;
+    this.ctx.player.moveEnabled = true;
+    this.ctx.hud.clearGameWidgets();
+  }
+
+  /** Hiders-style anim: none. Langit-Lupa players just run. */
+  localAnim(): number | null {
+    return null;
+  }
+
+  // ================================================================== per frame
+
+  update(dt: number): void {
+    if (!this.running) return;
+    if (this.isHost) this.hostUpdate(dt);
+    else {
+      const k = 1 - Math.exp(-dt * 12);
+      for (const t of this.tayas) {
+        const kp = t.kid.root.position;
+        const before = kp.clone();
+        kp.lerp(t.target, k);
+        const sp = before.distanceTo(kp) / Math.max(dt, 1e-3);
+        t.kid.speed = sp;
+        t.kid.mode = sp > 0.3 ? 'run' : 'idle';
+        if (sp > 0.3) t.kid.face(t.target.x, t.target.z, dt);
+      }
+    }
+    this.clientHud(dt);
+  }
+
+  private clientHud(dt: number): void {
+    const { hud, player } = this.ctx;
+    if (this.me.state === 'ready') {
+      this.readyT -= dt;
+      hud.setBig(this.readyT > 0 ? String(Math.ceil(this.readyT)) : null);
+    } else hud.setBig(null);
+
+    const onLangit = player.position.y > SAFE_HEIGHT;
+    let status: string;
+    if (this.me.state === 'out') status = this.multiplayer ? 'Huli ka na. Panoorin ang iba.' : 'Huli ka!';
+    else if (this.me.state === 'ready') status = 'Handa...';
+    else if (!onLangit) status = 'LUPA ka! Umakyat ka sa langit!';
+    else if (this.me.perchLeft <= 0) status = 'Bawal tumambay! Lumipat ka!';
+    else status = `LANGIT ka. Lipat bago ${Math.ceil(this.me.perchLeft)}s`;
+    hud.setObjective(status);
+    let stat = `Tagal: ${Math.floor(this.me.survived)}s   Talon: ${this.me.hops}`;
+    if (this.multiplayer && this.board.length > 1)
+      stat += '   ' + this.board.slice(0, 4).map(([id, s, st]) => `${this.nameOf(id)} ${s}${st === 'out' ? 'x' : ''}`).join(' · ');
+    hud.setStat(stat);
+    hud.setTimer(String(Math.max(0, Math.ceil(this.time))));
+  }
+
+  protected onClientMsg(d: GameData): void {
+    switch (d.k) {
+      case 's': {
+        this.time = Number(d.tm);
+        const ty = d.ty as number[];
+        if (!this.isHost) this.tayas.forEach((t, i) => t.target.set(ty[i * 2] ?? t.target.x, 0, ty[i * 2 + 1] ?? t.target.z));
+        const rows = d.p as Record<string, [number, number, number, number]>;
+        const mine = rows[this.selfId];
+        if (mine) this.me = { state: PSTATES[mine[0]], perchLeft: mine[1], survived: mine[2], hops: mine[3] };
+        this.board = Object.entries(rows)
+          .map(([id, v]) => [id, Math.floor(v[2]), PSTATES[v[0]]] as [string, number, PState])
+          .sort((a, b) => b[1] - a[1]);
+        break;
+      }
+      case 'go':
+        this.ctx.player.moveEnabled = true;
+        this.ctx.hud.toast('Takbo!', 'good', 800);
+        break;
+      case 'caught':
+        if (d.to === this.selfId) this.ctx.player.moveEnabled = this.multiplayer; // spectate by walking around in multiplayer
+        break;
+    }
+  }
+
+  // ================================================================== host
+
+  private hostUpdate(dt: number): void {
+    const ids = new Set(this.roster());
+    for (const id of [...this.parts.keys()]) if (!ids.has(id)) this.parts.delete(id);
+
+    if (this.hostReady > 0) {
+      this.hostReady -= dt;
+      if (this.hostReady <= 0) {
+        for (const p of this.parts.values()) p.state = 'play';
+        this.toAll({ k: 'go' });
+      }
+    } else if (!this.hostDone) {
+      this.hostTime -= dt;
+      for (const p of this.parts.values()) this.hostPart(p, dt);
+      this.hostTayas(dt);
+      const anyLeft = [...this.parts.values()].some((p) => p.state === 'play');
+      if (!anyLeft || this.hostTime <= 0) {
+        if (this.hostTime <= 0) this.toast(null, 'Tapos na ang oras!', 'good', 1400);
+        this.hostEnd();
+      }
+    }
+
+    this.snapT -= dt;
+    if (this.snapT <= 0) this.sendSnap();
+  }
+
+  private sendSnap(): void {
+    {
+      this.snapT = 1 / SNAP_HZ;
+      const p: Record<string, number[]> = {};
+      for (const x of this.parts.values())
+        p[x.id] = [PSTATES.indexOf(x.state), Math.round(Math.max(0, MAX_PERCH - x.perchT) * 10) / 10, Math.round(x.survived * 10) / 10, x.hops];
+      const ty: number[] = [];
+      for (const t of this.tayas) ty.push(Math.round(t.kid.root.position.x * 100) / 100, Math.round(t.kid.root.position.z * 100) / 100);
+      this.toAll({ k: 's', tm: Math.max(0, Math.round(this.hostTime * 10) / 10), ty, p });
+    }
+  }
+
+  private hostPart(p: Part, dt: number): void {
+    if (p.state !== 'play') return;
+    const pos = this.posOf(p.id);
+    if (!pos) return;
+    p.survived += dt;
+
+    // langit tracking: a new perch resets the timer and counts as a hop
+    if (pos.y > SAFE_HEIGHT) {
+      if (!p.anchor || Math.hypot(pos.x - p.anchor.x, pos.z - p.anchor.z) > 1.1) {
+        if (p.anchor) p.hops++;
+        p.anchor = pos.clone();
+        p.perchT = 0;
+        p.vulnerableWarned = false;
+      }
+      p.perchT += dt;
+      if (p.perchT > MAX_PERCH - 1.5 && !p.vulnerableWarned) {
+        p.vulnerableWarned = true;
+        this.toast(p.id, 'Lipat na! Bawal tumambay!', 'bad', 1100);
+        this.toAll({ k: 'sfx', name: 'tick', pos: null, to: p.id });
+      }
+    } else {
+      p.anchor = null;
+      p.perchT = 0;
+    }
+
+    // outside the chalk boundary
+    const outside = pos.x < BOUNDS.minX || pos.x > BOUNDS.maxX || pos.z < BOUNDS.minZ || pos.z > BOUNDS.maxZ;
+    p.outsideT = outside ? p.outsideT + dt : 0;
+    if (outside && p.outsideT > 0 && p.outsideT - dt <= 0) this.toast(p.id, 'Bumalik ka sa loob ng guhit!', 'bad', 1000);
+    if (p.outsideT > OUT_GRACE) this.catchPart(p, 'Lumabas ka!');
+  }
+
+  private vulnerable(p: Part, pos: THREE.Vector3): boolean {
+    return pos.y <= SAFE_HEIGHT || p.perchT > MAX_PERCH;
+  }
+
+  private catchPart(p: Part, msg: string): void {
+    p.state = 'out';
+    this.toast(p.id, msg, 'bad', 1500);
+    if (this.multiplayer) this.toast(null, `Huli si ${this.net!.nameOf(p.id)}!`, 'small', 1000);
+    this.toAll({ k: 'sfx', name: 'tag', pos: null, to: p.id });
+    this.toAll({ k: 'caught', to: p.id });
+  }
+
+  private hostTayas(dt: number): void {
+    const elapsed = TIME - this.hostTime;
+    const chaseSpeed = 4.0 + (elapsed / TIME) * 1.0; // speeds up over the minute
+    const claimed = new Set<string>();
+    for (const t of this.tayas) {
+      const kp = t.kid.root.position;
+      // prey: nearest vulnerable player not already chased by the other taya
+      let prey: { id: string; pos: THREE.Vector3; p: Part } | null = null;
+      let near: THREE.Vector3 | null = null;
+      let best = Infinity, bestAny = Infinity;
+      for (const p of this.parts.values()) {
+        if (p.state !== 'play') continue;
+        const pos = this.posOf(p.id);
+        if (!pos) continue;
+        const d = Math.hypot(pos.x - kp.x, pos.z - kp.z);
+        if (d < bestAny) {
+          bestAny = d;
+          near = pos;
+        }
+        if (this.vulnerable(p, pos) && !claimed.has(p.id) && d < best) {
+          best = d;
+          prey = { id: p.id, pos, p };
+        }
+      }
+      let target: THREE.Vector3 | null = null;
+      let speed = 2.2;
+      if (prey) {
+        claimed.add(prey.id);
+        target = prey.pos;
+        speed = chaseSpeed;
+        if (best < TAG_DIST) {
+          this.catchPart(prey.p, prey.pos.y <= SAFE_HEIGHT ? 'Huli ka sa lupa!' : 'Huli! Tumambay ka kasi.');
+          t.kid.mode = 'cheer';
+          continue;
+        }
+      } else if (near) {
+        // stalk: wait just below the nearest perched player
+        target = near;
+        speed = 2.4;
+      }
+      if (target) {
+        const dx = target.x - kp.x, dz = target.z - kp.z;
+        const d = Math.hypot(dx, dz);
+        const stop = prey ? 0.05 : 1.3;
+        if (d > stop) {
+          const s = Math.min(d - stop, speed * dt);
+          let ux = dx / d, uz = dz / d;
+          if (t.detourT > 0) {
+            // keep sliding sideways around the obstacle for a moment
+            t.detourT -= dt;
+            const sx = -uz * t.detour, sz = ux * t.detour;
+            ux = ux * 0.35 + sx;
+            uz = uz * 0.35 + sz;
+            const l = Math.hypot(ux, uz);
+            ux /= l;
+            uz /= l;
+          }
+          const ox = kp.x, oz = kp.z;
+          kp.x += ux * s;
+          kp.z += uz * s;
+          pushOut(kp);
+          const moved = Math.hypot(kp.x - ox, kp.z - oz);
+          if (moved < s * 0.4 && t.detourT <= 0) {
+            // blocked: pick the side that ends closer to the target
+            const tryDir = (sgn: number) => {
+              const px = ox + -dz / d * sgn * 0.6, pz = oz + dx / d * sgn * 0.6;
+              const v = new THREE.Vector3(px, 0, pz);
+              pushOut(v);
+              return Math.hypot(target!.x - v.x, target!.z - v.z);
+            };
+            t.detour = tryDir(1) <= tryDir(-1) ? 1 : -1;
+            t.detourT = 0.6;
+          }
+          t.kid.face(target.x, target.z, dt);
+          t.kid.mode = 'run';
+          t.kid.speed = speed;
+        } else {
+          t.kid.mode = 'idle';
+          t.kid.speed = 0;
+          t.kid.face(target.x, target.z, dt);
+        }
+      }
+      kp.x = THREE.MathUtils.clamp(kp.x, BOUNDS.minX - 0.5, BOUNDS.maxX + 0.5);
+      kp.z = THREE.MathUtils.clamp(kp.z, BOUNDS.minZ - 0.5, BOUNDS.maxZ + 0.5);
+      kp.y = 0;
+    }
+  }
+
+  private hostEnd(): void {
+    this.hostDone = true;
+    this.sendSnap();
+    const rows: EndRow[] = [...this.parts.values()].map((p) => {
+      const full = p.state === 'play';
+      const secs = Math.floor(Math.min(TIME, p.survived));
+      return {
+        id: p.id,
+        score: secs * 2 + p.hops + (full ? 40 : 0),
+        won: full,
+        lines: [`Tumagal: ${secs}s / ${TIME}s`, `Lipat-langit: ${p.hops}`, full ? 'Hindi ka nahuli! +40' : 'Nahuli ka. Ulitin mo!'],
+      };
+    });
+    this.endWith(rows);
+  }
+
+  protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
+    this.running = false;
+    this.ctx.player.moveEnabled = false;
+    this.ctx.hud.setObjective('');
+    this.ctx.hud.setBig(null);
+    const secs = mine.lines[0]?.match(/\d+/)?.[0] ?? '0';
+    this.ctx.finish({
+      gameName: this.name,
+      score: mine.score,
+      scoreLabel: 'puntos',
+      points: mine.score,
+      won,
+      lines: [...mine.lines, ...ranking],
+      shareText: mine.won
+        ? `Hindi ako nahuli sa Langit-Lupa, ${mine.score} puntos sa Barangay After Dark!`
+        : `Tumagal ako nang ${secs}s sa Langit-Lupa sa Barangay After Dark!`,
+    });
+  }
+}
+
+/** Slide a ground position out of any obstacle box (so the taya walks around crates). */
+function pushOut(p: THREE.Vector3): void {
+  const r = 0.3;
+  for (const [x0, x1, z0, z1] of BLOCKS) {
+    if (p.x < x0 - r || p.x > x1 + r || p.z < z0 - r || p.z > z1 + r) continue;
+    const dl = p.x - (x0 - r), dr = x1 + r - p.x, db = p.z - (z0 - r), df = z1 + r - p.z;
+    const m = Math.min(dl, dr, db, df);
+    if (m === dl) p.x = x0 - r;
+    else if (m === dr) p.x = x1 + r;
+    else if (m === db) p.z = z0 - r;
+    else p.z = z1 + r;
+  }
 }
