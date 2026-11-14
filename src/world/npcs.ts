@@ -51,17 +51,39 @@ function painted(parts: [THREE.BufferGeometry, number][]): THREE.BufferGeometry 
 
 const kidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 
+/** Bone indices in each kid's skeleton. */
+const B_ROOT = 0, B_BODY = 1, B_ARM_L = 2, B_ARM_R = 3, B_LEG_L = 4, B_LEG_R = 5;
+
+/** Like painted(), but also tags every vertex with a rigid bone index for skinning. */
+function paintedSkinned(parts: [THREE.BufferGeometry, number, number][]): THREE.BufferGeometry {
+  const gs = parts.map(([g, hex, bone]) => {
+    const ng = painted([[g, hex]]);
+    const n = ng.getAttribute('position').count;
+    const idx = new Uint16Array(n * 4);
+    const w = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      idx[i * 4] = bone;
+      w[i * 4] = 1;
+    }
+    ng.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    ng.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+    return ng;
+  });
+  return mergeGeometries(gs, false)!;
+}
+
 /**
- * Stylized low-poly kid (~1.25 m). Five meshes: body (torso+head+hair merged),
- * two arms and two legs, each pivoting at the joint.
+ * Stylized low-poly kid (~1.25 m), drawn as ONE skinned mesh (one draw call)
+ * with a tiny rigid skeleton: body (torso+head+hair), two arms and two legs,
+ * each bone pivoting at its joint.
  */
 export class Kid {
   readonly root = new THREE.Group();
-  readonly armL = new THREE.Group();
-  readonly armR = new THREE.Group();
-  readonly legL = new THREE.Group();
-  readonly legR = new THREE.Group();
-  private body: THREE.Mesh;
+  readonly armL = new THREE.Bone();
+  readonly armR = new THREE.Bone();
+  readonly legL = new THREE.Bone();
+  readonly legR = new THREE.Bone();
+  private body = new THREE.Bone();
   mode: KidMode = 'idle';
   // idle fidgets: look around, scratch head, little hop
   private fidget: 'none' | 'look' | 'scratch' | 'hop' = 'none';
@@ -118,28 +140,34 @@ export class Kid {
     const ss = L.shirtStyle ?? 0;
     if (ss === 1) parts.push([new THREE.BoxGeometry(0.365, 0.06, 0.225).translate(0, 0.8, 0), 0xffffff]);
     if (ss === 2) parts.push([new THREE.BoxGeometry(0.12, 0.13, 0.01).translate(0, 0.79, 0.112), 0xffffff]);
-    this.body = new THREE.Mesh(painted(parts), kidMat);
-    this.root.add(this.body);
+    // Skeleton (rest pose): body pivots at the feet (lean), arms at the
+    // shoulders, legs at the hips. All parts are baked into one geometry.
+    const rootBone = new THREE.Bone();
+    rootBone.add(this.body);
+    this.armL.position.set(0.235, 0.95, 0);
+    this.armR.position.set(-0.235, 0.95, 0);
+    this.legL.position.set(0.09, 0.55, 0);
+    this.legR.position.set(-0.09, 0.55, 0);
+    rootBone.add(this.armL, this.armR, this.legL, this.legR);
 
-    const armGeo = painted([
-      [new THREE.BoxGeometry(0.12, 0.15, 0.13).translate(0, -0.07, 0), L.shirt],
-      [new THREE.BoxGeometry(0.09, 0.32, 0.09).translate(0, -0.29, 0), L.skin],
-    ]);
-    const legGeo = painted([
-      [new THREE.BoxGeometry(0.15, 0.2, 0.16).translate(0, -0.1, 0), L.shorts],
-      [new THREE.BoxGeometry(0.11, 0.33, 0.11).translate(0, -0.36, 0), L.skin],
-      [new THREE.BoxGeometry(0.13, 0.03, 0.23).translate(0, -0.535, 0.03), L.slipper],
-    ]);
-    for (const [g, x] of [[this.armL, 0.235], [this.armR, -0.235]] as [THREE.Group, number][]) {
-      g.position.set(x, 0.95, 0);
-      g.add(new THREE.Mesh(armGeo, kidMat));
-      this.root.add(g);
+    const all: [THREE.BufferGeometry, number, number][] = parts.map(([g, c]) => [g, c, B_BODY]);
+    for (const [bone, x] of [[B_ARM_L, 0.235], [B_ARM_R, -0.235]]) {
+      all.push([new THREE.BoxGeometry(0.12, 0.15, 0.13).translate(x, 0.95 - 0.07, 0), L.shirt, bone]);
+      all.push([new THREE.BoxGeometry(0.09, 0.32, 0.09).translate(x, 0.95 - 0.29, 0), L.skin, bone]);
     }
-    for (const [g, x] of [[this.legL, 0.09], [this.legR, -0.09]] as [THREE.Group, number][]) {
-      g.position.set(x, 0.55, 0);
-      g.add(new THREE.Mesh(legGeo, kidMat));
-      this.root.add(g);
+    for (const [bone, x] of [[B_LEG_L, 0.09], [B_LEG_R, -0.09]]) {
+      all.push([new THREE.BoxGeometry(0.15, 0.2, 0.16).translate(x, 0.55 - 0.1, 0), L.shorts, bone]);
+      all.push([new THREE.BoxGeometry(0.11, 0.33, 0.11).translate(x, 0.55 - 0.36, 0), L.skin, bone]);
+      all.push([new THREE.BoxGeometry(0.13, 0.03, 0.23).translate(x, 0.55 - 0.535, 0.03), L.slipper, bone]);
     }
+    const mesh = new THREE.SkinnedMesh(paintedSkinned(all), kidMat);
+    mesh.add(rootBone);
+    mesh.updateMatrixWorld(true);
+    mesh.bind(new THREE.Skeleton([rootBone, this.body, this.armL, this.armR, this.legL, this.legR]));
+    // fixed culling sphere that covers raised arms and hops
+    mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.75, 0), 1.15);
+    void B_ROOT;
+    this.root.add(mesh);
   }
 
   addShadow(blobs: BlobShadows): void {

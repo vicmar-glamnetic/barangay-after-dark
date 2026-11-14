@@ -7,6 +7,7 @@ import {
   B, C, TexKit, arch, coconut, court, house, jeepney, langitArea, local, parolGeometry,
   pottedPlant, sampayan, sariSari, shade, tree, tricycle, waitingShed,
 } from './props';
+import { GlowField } from './glows';
 import { capizTexture, courtTexture, radialTexture, signTexture, storeWindowTexture } from './textures';
 
 /**
@@ -189,20 +190,16 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   // ---------------------------------------------------------------- wires, glows, string lights, parols
   buildWires(scene);
   const glowTex = radialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)', 64, [[0.2, 'rgba(255,255,255,0.6)'], [0.5, 'rgba(255,255,255,0.12)']]);
-  const glow = (p: THREE.Vector3, color: number, size: number) => {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
-    s.position.copy(p);
-    s.scale.setScalar(size);
-    scene.add(s);
-    return s;
-  };
-  const lampGlows = lampHeads.map((h) => glow(h.clone().setY(h.y - 0.12), 0xffb35c, 2.6));
+  // every static halo goes into one instanced draw call (built further down)
+  const glows = new GlowField(scene, glowTex);
+  const glow = (p: THREE.Vector3, color: number, size: number) => glows.add(p, color, size);
+  const lampGlows = lampHeads.map((h) => glow(h.clone().setY(h.y - 0.12), 0xffb35c, 3.5));
   // one old lamp near the plaza flickers now and then
   const flicker = lampGlows[4];
   let flickT = 6;
-  glow(storeBulb, 0xffe0a8, 1.4);
-  glow(floodA, 0xfff0d0, 2.4);
-  glow(floodB, 0xfff0d0, 2.4);
+  glow(storeBulb, 0xffe0a8, 2.0);
+  glow(floodA, 0xfff0d0, 3.0);
+  glow(floodB, 0xfff0d0, 3.0);
 
   // light pools on the ground under lamps (one merged additive mesh)
   {
@@ -258,8 +255,10 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
     m.position.copy(p);
     scene.add(m);
     parols.push(m);
-    glow(p, parolCols[i], 1.8);
+    glow(p, parolCols[i], 2.4);
   });
+
+  glows.build();
 
   // videoke window: cycling party colors (its own tiny material)
   const vkMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
@@ -277,10 +276,10 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
       if (flickT < 0) {
         // a burst of 0.6 s of stutter, then steady for a while
         const on = Math.sin(t * 61) * Math.sin(t * 23) > -0.2;
-        (flicker.material as THREE.SpriteMaterial).opacity = on ? 1 : 0.15;
+        glows.setIntensity(flicker, on ? 1 : 0.15);
         if (flickT < -0.6) {
           flickT = 4 + Math.random() * 7;
-          (flicker.material as THREE.SpriteMaterial).opacity = 1;
+          glows.setIntensity(flicker, 1);
         }
       }
       const i = Math.floor(t * 1.6) % vkColors.length;
