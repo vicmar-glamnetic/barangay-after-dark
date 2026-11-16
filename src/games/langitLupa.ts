@@ -490,8 +490,8 @@ export class LangitLupa extends BaseGame {
       won,
       lines: [...mine.lines, ...ranking],
       shareText: mine.won
-        ? `Hindi ako nahuli sa Langit-Lupa, ${mine.score} puntos sa Barangay After Dark!`
-        : `Tumagal ako nang ${secs}s sa Langit-Lupa sa Barangay After Dark!`,
+        ? `Hindi ako nahuli sa Langit-Lupa, ${mine.score} puntos sa Hari ng Kanto!`
+        : `Tumagal ako nang ${secs}s sa Langit-Lupa sa Hari ng Kanto!`,
     });
   }
 }

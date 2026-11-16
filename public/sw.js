@@ -2,7 +2,7 @@
 // - Page navigations: network first, fall back to the cached shell (offline play).
 // - Same-origin assets: cache first (Vite file names are content-hashed).
 // Bump VERSION to drop old caches.
-const VERSION = 'bad-v1';
+const VERSION = 'hnk-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

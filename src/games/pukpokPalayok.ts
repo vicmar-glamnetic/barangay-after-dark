@@ -347,7 +347,7 @@ export class PukpokPalayok extends BaseGame {
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Nakabasag ako ng ${n} palayok nang nakapiring, ${mine.score} puntos sa Barangay After Dark!`,
+      shareText: `Nakabasag ako ng ${n} palayok nang nakapiring, ${mine.score} puntos sa Hari ng Kanto!`,
     });
   }
 }

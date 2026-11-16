@@ -43,7 +43,7 @@ export class Menus {
     this.title = el(
       'div.title.interactive',
       {},
-      el('div.logo', {}, el('div.l1', { text: 'Barangay' }), el('div.l2', { text: 'AFTER DARK' })),
+      el('div.logo', {}, el('div.crown', { text: '♛' }), el('div.l1', { text: 'Hari ng' }), el('div.l2', { text: 'KANTO' })),
       el('div.tagline', { text: 'Laro ng Lahi sa ilalim ng buwan' }),
       loading,
       this.titleBtn,
@@ -228,7 +228,7 @@ export class Menus {
     o: { onRetry: (() => void) | null; retryNote?: string; onBack: () => void; backLabel: string },
   ): void {
     const copyBtn = this.button('Copy score', '.alt', async () => {
-      const ok = await copyText(r.shareText);
+      const ok = await copyText(`${r.shareText} Kaya mo bang talunin? ${location.origin}${location.pathname}`);
       copyBtn.textContent = ok ? 'Nakopya na!' : 'Hindi ma-copy';
       setTimeout(() => (copyBtn.textContent = 'Copy score'), 1600);
     });
@@ -459,7 +459,7 @@ export class Menus {
     const startBtn = this.button('Simulan!', '', o.onStart);
     const code = el('div.code', { text: s.code });
     const copyBtn = this.button('Copy code', '.alt.small', async () => {
-      const ok = await copyText(`Laro tayo sa Barangay After Dark! Code: ${s.code}  ${location.href.split('?')[0]}`);
+      const ok = await copyText(`Laro tayo sa Hari ng Kanto! Code: ${s.code}  ${location.origin}${location.pathname}`);
       copyBtn.textContent = ok ? 'Nakopya!' : 'Hindi ma-copy';
       setTimeout(() => (copyBtn.textContent = 'Copy code'), 1500);
     });

@@ -1,4 +1,4 @@
-# Barangay After Dark
+# Hari ng Kanto
 
 A first-person 3D browser game set in a Filipino barangay at night. Walk around, find the kids playing Laro ng Lahi, and join their games to earn **Tropa Points**.
 

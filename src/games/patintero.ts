@@ -446,8 +446,8 @@ export class Patintero extends BaseGame {
       won,
       lines: [...mine.lines, ...ranking],
       shareText: mine.won
-        ? `Nakatawid ako pabalik sa Patintero, ${mine.score} puntos sa Barangay After Dark!`
-        : `Naka-${crossed} linya ako sa Patintero sa Barangay After Dark!`,
+        ? `Nakatawid ako pabalik sa Patintero, ${mine.score} puntos sa Hari ng Kanto!`
+        : `Naka-${crossed} linya ako sa Patintero sa Hari ng Kanto!`,
     });
   }
 }

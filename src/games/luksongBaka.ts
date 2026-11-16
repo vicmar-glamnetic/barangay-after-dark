@@ -229,7 +229,7 @@ export class LuksongBaka extends BaseGame {
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Nakalundag ako hanggang level ${lvl} sa Luksong Baka, ${mine.score} puntos sa Barangay After Dark!`,
+      shareText: `Nakalundag ako hanggang level ${lvl} sa Luksong Baka, ${mine.score} puntos sa Hari ng Kanto!`,
     });
   }
 }

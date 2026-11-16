@@ -295,7 +295,7 @@ export class Sipa extends BaseGame {
       points: s * 2 + this.perfects,
       won,
       lines: [...mine.lines, ...(ranking.length ? ranking : [s >= 10 ? 'Pang-barangay champion!' : 'Kaya mo pa yan! Abutin ang 10.'])],
-      shareText: `Naka-${s} sipa ako sa Barangay After Dark!`,
+      shareText: `Naka-${s} sipa ako sa Hari ng Kanto!`,
     });
   }
 }

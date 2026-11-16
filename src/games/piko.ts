@@ -491,7 +491,7 @@ export class Piko extends BaseGame {
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Naka-${sq} square ako sa Piko, ${mine.score} puntos sa Barangay After Dark!`,
+      shareText: `Naka-${sq} square ako sa Piko, ${mine.score} puntos sa Hari ng Kanto!`,
     });
   }
 }

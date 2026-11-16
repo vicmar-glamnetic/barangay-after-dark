@@ -406,10 +406,10 @@ export class Taguan extends BaseGame {
       won,
       lines: [...mine.lines, ...ranking],
       shareText: seeker
-        ? `${this.found.size} ang nahanap ko sa Taguan, ${mine.score} puntos sa Barangay After Dark!`
+        ? `${this.found.size} ang nahanap ko sa Taguan, ${mine.score} puntos sa Hari ng Kanto!`
         : won
-          ? 'Hindi ako nahanap sa Taguan sa Barangay After Dark!'
-          : `Nakapagtago ako nang ${mine.score}s sa Taguan sa Barangay After Dark!`,
+          ? 'Hindi ako nahanap sa Taguan sa Hari ng Kanto!'
+          : `Nakapagtago ako nang ${mine.score}s sa Taguan sa Hari ng Kanto!`,
     });
   }
 }

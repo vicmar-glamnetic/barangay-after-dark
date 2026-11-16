@@ -318,7 +318,7 @@ export class Holen extends BaseGame {
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Naka-${out} holen ako palabas ng bilog, ${mine.score} puntos sa Barangay After Dark!`,
+      shareText: `Naka-${out} holen ako palabas ng bilog, ${mine.score} puntos sa Hari ng Kanto!`,
     });
   }
 }

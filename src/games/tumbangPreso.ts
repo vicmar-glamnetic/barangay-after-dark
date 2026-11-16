@@ -945,7 +945,7 @@ export class TumbangPreso extends BaseGame {
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Naka-${knocks} tumba at ${mine.score} puntos ako sa Tumbang Preso sa Barangay After Dark!`,
+      shareText: `Naka-${knocks} tumba at ${mine.score} puntos ako sa Tumbang Preso sa Hari ng Kanto!`,
     });
   }
 }
