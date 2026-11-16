@@ -105,6 +105,15 @@ scripts/make-icons.mjs  dependency-free PNG icon generator
 
 ## Deploy
 
+**Live:** https://haringkanto.vercel.app
+
+```bash
+npm run deploy      # Vercel production (project "haringkanto", Vercel builds it with Vite)
+npm run deploy:gh   # optional: GitHub Pages copy on the gh-pages branch
+```
+
+### Other hosts
+
 The build is a static site in `dist/`. `vite.config.ts` uses `base: './'`, so the same build works at a domain root or in a subfolder.
 
 **Vercel:** import the repo. Framework preset: Vite. Build command `npm run build`, output directory `dist`.
