@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GameData } from '../net/session';
 import { Kid } from '../world/npcs';
+import { GroundBot } from '../world/groundBot';
 import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
 
@@ -30,12 +31,6 @@ const TAG_DIST = 0.95;
 const OUT_GRACE = 2;
 const SNAP_HZ = 15;
 
-/** Obstacles in the arena (world XZ boxes) so the taya walks around them. */
-const BLOCKS: [number, number, number, number][] = [
-  // [minX, maxX, minZ, maxZ] built by world/props.ts langitArea (frame 23.5, 11)
-  [20.5, 21.5, 8.5, 9.5], [21.7, 22.7, 8.3, 9.3], [25.55, 26.65, 12.85, 13.95], [22.4, 25.6, 7.6, 8.0],
-  [22.3, 24.7, 11.9, 12.5], [19.78, 20.42, 12.28, 12.92], [20.48, 21.12, 13.08, 13.72], [26.0, 27.4, 9.0, 11.0],
-];
 /** Extra platforms this game adds (x, z, w, h, d) for longer hop chains. */
 const EXTRA: [number, number, number, number, number][] = [
   [25.2, 15.4, 1.0, 0.8, 1.0],
@@ -47,6 +42,7 @@ const EXTRA: [number, number, number, number, number][] = [
 /** Start perches, one per player. */
 const STARTS: [number, number][] = [[21, 9], [24, 7.8], [26.1, 13.4], [26.7, 10], [23.5, 12.2], [25.2, 15.4]];
 const TAYA_START: [number, number][] = [[19.3, 6.3], [28.8, 16.1]];
+const _stalk = new THREE.Vector3();
 
 type PState = 'ready' | 'play' | 'out';
 const PSTATES: PState[] = ['ready', 'play', 'out'];
@@ -69,6 +65,9 @@ interface Taya {
   /** When blocked by a crate: side-step direction (+1/-1) and how long to keep it. */
   detour: number;
   detourT: number;
+  /** Host only: physics mover that slides along the real crates and walls. */
+  bot: GroundBot | null;
+  stuckFlip: boolean;
 }
 
 export class LangitLupa extends BaseGame {
@@ -123,7 +122,6 @@ export class LangitLupa extends BaseGame {
       parts.push(tint(new THREE.BoxGeometry(w, h, d).translate(x, h / 2, z), 0x8a5a36));
       parts.push(tint(new THREE.BoxGeometry(w + 0.03, 0.05, d + 0.03).translate(x, h - 0.02, z), 0x4e3320));
       physics.addBox(x, h / 2, z, w / 2, h / 2, d / 2);
-      BLOCKS.push([x - w / 2, x + w / 2, z - d / 2, z + d / 2]);
     }
     scene.add(new THREE.Mesh(mergeGeometries(parts, false)!, new THREE.MeshLambertMaterial({ vertexColors: true })));
     // chalk boundary (only visible during the game)
@@ -162,13 +160,13 @@ export class LangitLupa extends BaseGame {
       const [x, z] = TAYA_START[i];
       kid.root.position.set(x, 0, z);
       kid.mode = 'idle';
-      return { kid, target: new THREE.Vector3(x, 0, z), speed: 0, detour: 1, detourT: 0 };
+      return { kid, target: new THREE.Vector3(x, 0, z), speed: 0, detour: 1, detourT: 0, stuckFlip: false, bot: this.isHost ? new GroundBot(this.ctx.physics, x, z) : null };
     });
     // the other hub kids step outside the boundary and cheer
     const spect: [number, number][] = [[18.2, 5.2], [29.4, 5.4], [18.1, 16.9]];
     this.group.kids.slice(1).forEach((k, i) => {
       const [x, z] = spect[i];
-      k.root.position.set(x, 0, z);
+      k.root.position.set(x, this.ctx.groundAt(x, z), z);
       k.face(23.5, 11);
       k.mode = 'cheer';
     });
@@ -200,6 +198,7 @@ export class LangitLupa extends BaseGame {
   }
 
   stop(): void {
+    for (const t of this.tayas) t.bot?.dispose();
     for (const k of this.extras) k.dispose();
     this.extras = [];
     this.tayas = [];
@@ -400,14 +399,16 @@ export class LangitLupa extends BaseGame {
           continue;
         }
       } else if (near) {
-        // stalk: wait just below the nearest perched player
-        target = near;
+        // stalk: wait on the ground right beside the nearest perched player
+        const sx = kp.x - near.x, sz = kp.z - near.z;
+        const sl = Math.hypot(sx, sz) || 1;
+        target = _stalk.set(near.x + (sx / sl) * 1.1, 0, near.z + (sz / sl) * 1.1);
         speed = 2.4;
       }
       if (target) {
         const dx = target.x - kp.x, dz = target.z - kp.z;
         const d = Math.hypot(dx, dz);
-        const stop = prey ? 0.05 : 1.3;
+        const stop = prey ? 0.05 : 0.3;
         if (d > stop) {
           const s = Math.min(d - stop, speed * dt);
           let ux = dx / d, uz = dz / d;
@@ -421,21 +422,15 @@ export class LangitLupa extends BaseGame {
             ux /= l;
             uz /= l;
           }
-          const ox = kp.x, oz = kp.z;
-          kp.x += ux * s;
-          kp.z += uz * s;
-          pushOut(kp);
-          const moved = Math.hypot(kp.x - ox, kp.z - oz);
-          if (moved < s * 0.4 && t.detourT <= 0) {
-            // blocked: pick the side that ends closer to the target
-            const tryDir = (sgn: number) => {
-              const px = ox + -dz / d * sgn * 0.6, pz = oz + dx / d * sgn * 0.6;
-              const v = new THREE.Vector3(px, 0, pz);
-              pushOut(v);
-              return Math.hypot(target!.x - v.x, target!.z - v.z);
-            };
-            t.detour = tryDir(1) <= tryDir(-1) ? 1 : -1;
-            t.detourT = 0.6;
+          // physics move: slides along real crates/walls, can never go inside them
+          t.bot!.move(ux * s, uz * s, dt);
+          if (t.bot!.moved < s * 0.35 && t.detourT <= 0) {
+            // blocked against a crate: slide around it, on the side nearer the target
+            // (cross product sign says whether the target is to our left or right)
+            const side = Math.sign(-dz * (target.x - kp.x) + dx * (target.z - kp.z)) || (Math.random() < 0.5 ? 1 : -1);
+            t.detour = t.stuckFlip ? -side : side;
+            t.stuckFlip = !t.stuckFlip && t.bot!.moved < s * 0.05;
+            t.detourT = 0.7;
           }
           t.kid.face(target.x, target.z, dt);
           t.kid.mode = 'run';
@@ -446,9 +441,22 @@ export class LangitLupa extends BaseGame {
           t.kid.face(target.x, target.z, dt);
         }
       }
-      kp.x = THREE.MathUtils.clamp(kp.x, BOUNDS.minX - 0.5, BOUNDS.maxX + 0.5);
-      kp.z = THREE.MathUtils.clamp(kp.z, BOUNDS.minZ - 0.5, BOUNDS.maxZ + 0.5);
-      kp.y = 0;
+      if (!target || Math.hypot(target.x - kp.x, target.z - kp.z) <= (prey ? 0.05 : 0.3)) t.bot!.move(0, 0, dt);
+    }
+  }
+
+  /** Host: read the bots' resolved positions after the physics step. */
+  postPhysics(): void {
+    if (!this.running || !this.isHost) return;
+    for (const t of this.tayas) {
+      if (!t.bot) continue;
+      t.bot.sync();
+      const p = t.bot.position;
+      // keep the taya near the chalk area (soft leash, it never needs to leave)
+      if (p.x < BOUNDS.minX - 0.6 || p.x > BOUNDS.maxX + 0.6 || p.z < BOUNDS.minZ - 0.6 || p.z > BOUNDS.maxZ + 0.6) {
+        t.bot.teleport(THREE.MathUtils.clamp(p.x, BOUNDS.minX, BOUNDS.maxX), THREE.MathUtils.clamp(p.z, BOUNDS.minZ, BOUNDS.maxZ));
+      }
+      t.kid.root.position.copy(t.bot.position);
     }
   }
 
@@ -488,16 +496,3 @@ export class LangitLupa extends BaseGame {
   }
 }
 
-/** Slide a ground position out of any obstacle box (so the taya walks around crates). */
-function pushOut(p: THREE.Vector3): void {
-  const r = 0.3;
-  for (const [x0, x1, z0, z1] of BLOCKS) {
-    if (p.x < x0 - r || p.x > x1 + r || p.z < z0 - r || p.z > z1 + r) continue;
-    const dl = p.x - (x0 - r), dr = x1 + r - p.x, db = p.z - (z0 - r), df = z1 + r - p.z;
-    const m = Math.min(dl, dr, db, df);
-    if (m === dl) p.x = x0 - r;
-    else if (m === dr) p.x = x1 + r;
-    else if (m === db) p.z = z0 - r;
-    else p.z = z1 + r;
-  }
-}
