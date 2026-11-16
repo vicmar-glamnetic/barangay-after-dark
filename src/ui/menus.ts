@@ -3,6 +3,7 @@ import type { GameResult } from '../games/types';
 import { cleanCode, sanitizeName, type Session } from '../net/session';
 import { device } from '../core/device';
 import { loadSavedFace, processFaceFile, saveFace } from '../net/face';
+import { RANKS, SLIPPERS, rankIndex } from '../core/progression';
 import { copyText, el, onTap } from './dom';
 
 type Kind = 'none' | 'pause' | 'settings' | 'end' | 'game' | 'join' | 'lobby' | 'busy';
@@ -17,6 +18,8 @@ export interface MenuCallbacks {
   onUiSound: () => void;
   /** My custom face changed (null = removed). */
   onFace: (face: string | null) => void;
+  /** Tsinelas color picked (index into SLIPPERS). */
+  onSlipper: (i: number) => void;
 }
 
 /**
@@ -65,7 +68,7 @@ export class Menus {
   refreshTitle(): void {
     if (!this.titleBtn.disabled) this.titleBtn.textContent = this.isTouch() ? 'Tap to start' : 'Click to start';
     const pts = this.save.data.tropaPoints;
-    this.titleMeta.textContent = pts > 0 ? `★ ${pts} Tropa Points` : 'Walk around. Find the kids. Laro tayo!';
+    this.titleMeta.textContent = pts > 0 ? `★ ${pts} Tropa Points  ·  ${RANKS[rankIndex(pts)].name}${this.save.data.streak > 1 ? `  ·  ${this.save.data.streak} araw sunod-sunod` : ''}` : 'Walk around. Find the kids. Laro tayo!';
   }
 
   showTitle(v: boolean): void {
@@ -210,6 +213,7 @@ export class Menus {
         ['On', () => s.showFps, () => (s.showFps = true)],
       ])),
       el('label', {}, el('span', { text: 'Volume' }), vol),
+      this.slipperField(),
       this.faceField(),
       el('div.btns', {}, this.button('Balik', '', back), reset),
     );
@@ -220,7 +224,7 @@ export class Menus {
 
   showEnd(
     r: GameResult,
-    extra: { best: number; isBest: boolean; unlocked?: string },
+    extra: { best: number; isBest: boolean; unlocked?: string; stars?: number; newStars?: boolean; dailyMsg?: string; rankMsg?: string; nudge?: string },
     o: { onRetry: (() => void) | null; retryNote?: string; onBack: () => void; backLabel: string },
   ): void {
     const copyBtn = this.button('Copy score', '.alt', async () => {
@@ -231,14 +235,21 @@ export class Menus {
     const card = el(
       'div.card',
       {},
-      el(`h2.${r.won ? 'good' : 'bad'}` as 'h2', { text: r.won ? 'Panalo!' : 'Talo ka!' }),
+      // endless games rarely "win": earning stars still deserves praise
+      el(`h2.${r.won || (extra.stars ?? 0) >= 1 ? 'good' : 'bad'}` as 'h2', { text: r.won ? 'Panalo!' : (extra.stars ?? 0) >= 1 ? 'Ayos!' : 'Talo ka!' }),
       el('p', { text: r.gameName }),
       el('div.score', { text: String(r.score) }),
       el('p', { text: r.scoreLabel }),
+      extra.stars !== undefined
+        ? el((extra.newStars ? 'div.stars.new' : 'div.stars') as 'div', {}, ...[0, 1, 2].map((i) => el((i < (extra.stars ?? 0) ? 'span.on' : 'span') as 'span', { text: '★', attrs: { style: `animation-delay:${0.25 + i * 0.22}s` } })))
+        : null,
+      extra.rankMsg ? el('div.badge.rankup', { text: extra.rankMsg }) : null,
+      extra.dailyMsg ? el('div.badge.daily', { text: extra.dailyMsg }) : null,
       el('div.lines', {}, ...r.lines.map((l) => el('div', { text: l })),
         el('div', { text: `+${r.points} Tropa Points` }),
         el('div', { text: extra.isBest ? 'Bagong best score!' : `Best: ${extra.best}` }),
-        extra.unlocked ? el('div', { text: `Na-unlock: ${extra.unlocked}!` }) : null),
+        extra.unlocked ? el('div', { text: `Na-unlock: ${extra.unlocked}!` }) : null,
+        extra.nudge ? el('div.nudge', { text: extra.nudge }) : null),
       el('div.btns', {}, o.onRetry ? this.button('Ulit?', '', o.onRetry) : null, this.button(o.backLabel, '.alt', o.onBack), copyBtn),
       o.retryNote ? el('p', { text: o.retryNote }) : null,
     );
@@ -281,6 +292,37 @@ export class Menus {
     this.face = f;
     saveFace(f);
     this.cb.onFace(f);
+  }
+
+  /** Tsinelas colors: unlocked by rank, locked ones show what rank they need. */
+  private slipperField(): HTMLElement {
+    const have = rankIndex(this.save.data.tropaPoints);
+    const row = el('span.swatches');
+    const note = el('p.hint');
+    const render = () => {
+      row.replaceChildren(
+        ...SLIPPERS.map((s, i) => {
+          const locked = s.rank > have;
+          const b = el(`button.swatch${i === this.save.data.slipper ? '.on' : ''}${locked ? '.locked' : ''}` as 'button', {
+            attrs: { style: `background:linear-gradient(135deg,#${s.top.toString(16).padStart(6, '0')} 50%,#${s.strap.toString(16).padStart(6, '0')} 50%)`, 'aria-label': s.name, title: s.name },
+          });
+          onTap(b, () => {
+            if (locked) {
+              note.textContent = `${s.name}: kailangan ang ranggong ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa).`;
+              return;
+            }
+            this.save.data.slipper = i;
+            this.save.persist();
+            this.cb.onSlipper(i);
+            note.textContent = `Tsinelas: ${s.name}`;
+            render();
+          });
+          return b;
+        }),
+      );
+    };
+    render();
+    return el('div.field', {}, el('div.lbl', {}, el('span', { text: 'Tsinelas' }), row), note);
   }
 
   /** Pick / preview / remove a custom face picture. */

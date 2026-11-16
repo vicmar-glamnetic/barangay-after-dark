@@ -5,6 +5,8 @@ import { device } from './core/device';
 import { Input } from './core/input';
 import { Loop } from './core/loop';
 import { PerfGovernor } from './core/perf';
+import { SLIPPERS, rankIndex } from './core/progression';
+import { slipperColors } from './player/tsinelas';
 import { Physics } from './core/physics';
 import { Renderer } from './core/renderer';
 import { SaveStore, type Settings } from './core/save';
@@ -84,6 +86,7 @@ class App {
       },
       onUiSound: () => this.audio.play('ui'),
       onFace: (face) => this.games?.session?.setFace(face),
+      onSlipper: (i) => this.applySlipper(i),
     }, () => this.input.usingTouch);
     this.overlays = new Overlays(this.ui);
     this.setTouchMode(this.input.usingTouch);
@@ -169,6 +172,8 @@ class App {
     this.physics.step(1 / 60);
     this.audio.setVolume(this.save.data.settings.volume);
     this.hud.setPoints(this.save.data.tropaPoints);
+    this.hud.setRank(this.games.progressText());
+    this.applySlipper(this.save.data.slipper);
 
     this.state = 'title';
     this.menus.setTitleReady();
@@ -221,6 +226,15 @@ class App {
     this.input.enabled = true;
     this.touch.setVisible(this.input.usingTouch);
     this.input.requestLock();
+  }
+
+  /** Tsinelas color (only colors unlocked by rank are allowed). */
+  private applySlipper(i: number): void {
+    const allowed = SLIPPERS.filter((s) => s.rank <= rankIndex(this.save.data.tropaPoints));
+    const s = SLIPPERS[i] && SLIPPERS[i].rank <= rankIndex(this.save.data.tropaPoints) ? SLIPPERS[i] : allowed[0];
+    this.hand.setSlipperColors(s.strap, s.top);
+    slipperColors.strap = s.strap;
+    slipperColors.top = s.top;
   }
 
   /** Auto FPS level changed: resolution, bloom, clouds + fireflies. */

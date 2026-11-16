@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { RigidBody } from '@dimforge/rapier3d-compat';
 import { RAPIER } from '../core/physics';
 import type { GameData } from '../net/session';
-import { TSINELAS, tsinelasGeometry, tsinelasMaterial } from '../player/tsinelas';
+import { TSINELAS, slipperColors, tsinelasGeometry, tsinelasMaterial } from '../player/tsinelas';
 import type { Kid, KidMode } from '../world/npcs';
 import { canTexture } from '../world/textures';
 import { BaseGame, type EndRow } from './baseGame';
@@ -482,7 +482,8 @@ export class TumbangPreso extends BaseGame {
   private ensureSlipMesh(id: string): THREE.Mesh {
     let m = this.slipMeshes.get(id);
     if (!m) {
-      m = new THREE.Mesh(this.slipGeo, tsinelasMaterial);
+      // my own slipper in my chosen colors; everyone else's in the default blue
+      m = new THREE.Mesh(id === this.selfId ? tsinelasGeometry(slipperColors.strap, slipperColors.top) : this.slipGeo, tsinelasMaterial);
       this.ctx.scene.add(m);
       this.slipMeshes.set(id, m);
       this.slipShadows.set(id, this.ctx.blobs.add(m, 0.4));

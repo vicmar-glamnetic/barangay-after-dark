@@ -13,6 +13,9 @@ export class Hand {
   private arm = new THREE.Group();
   private slipper: THREE.Mesh;
   private leg = new THREE.Group();
+  private stick = new THREE.Group();
+  private stickOn = false;
+  private swingT = 1;
 
   private holding = false;
   private aim = -1; // -1 = not aiming, else 0..1 power
@@ -63,7 +66,31 @@ export class Hand {
     this.leg.position.set(0.05, -1.25, -0.9);
     this.leg.visible = false;
     this.root.add(this.leg);
+
+    // Bamboo stick for Pukpok Palayok: held in both hands, swings down
+    const bamboo = new THREE.MeshLambertMaterial({ color: 0xc8a856 });
+    const node = new THREE.MeshLambertMaterial({ color: 0x8c6d2f });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.1, 8), bamboo);
+    pole.position.y = 0.45;
+    this.stick.add(pole);
+    for (const y of [0.15, 0.5, 0.85]) {
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.02, 8), node);
+      ring.position.y = y;
+      this.stick.add(ring);
+    }
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.1), skin);
+    this.stick.add(fist);
+    this.stick.position.set(0.28, -0.42, -0.55);
+    this.stick.rotation.set(-0.35, 0, -0.25);
+    this.stick.visible = false;
+    this.root.add(this.stick);
     this.root.visible = false;
+  }
+
+  /** Recolor the held tsinelas (unlockable colors). */
+  setSlipperColors(strap: number, top: number): void {
+    this.slipper.geometry.dispose();
+    this.slipper.geometry = tsinelasGeometry(strap, top);
   }
 
   setHolding(v: boolean): void {
@@ -95,9 +122,20 @@ export class Hand {
     this.kickT = 0;
   }
 
+  showStick(v: boolean): void {
+    this.stickOn = v;
+    this.stick.visible = v;
+    this.swingT = 1;
+    this.refresh();
+  }
+
+  swing(): void {
+    this.swingT = 0;
+  }
+
   private refresh(): void {
     this.arm.visible = this.holding || this.throwT < 1;
-    this.root.visible = this.arm.visible || this.legOn;
+    this.root.visible = this.arm.visible || this.legOn || this.stickOn;
   }
 
   update(dt: number, moveSpeed: number): void {
@@ -122,6 +160,16 @@ export class Hand {
     this.arm.position.lerp(target, Math.min(1, dt * 16));
     this.arm.rotation.x += (rx - this.arm.rotation.x) * Math.min(1, dt * 16);
 
+    if (this.stickOn) {
+      // wind up, then smash down and across
+      this.swingT = Math.min(1, this.swingT + dt * 2.6);
+      const k = this.swingT;
+      const wind = k < 0.25 ? k / 0.25 : 0;
+      const hit = k >= 0.25 && k < 0.55 ? (k - 0.25) / 0.3 : k >= 0.55 ? 1 - (k - 0.55) / 0.45 : 0;
+      this.stick.rotation.x = -0.35 - wind * 0.9 + hit * 1.6;
+      this.stick.rotation.z = -0.25 + hit * 0.5;
+      this.stick.position.y = -0.42 + wind * 0.12 - hit * 0.1;
+    }
     if (this.legOn) {
       // kick: up fast, down slower
       this.kickT = Math.min(1, this.kickT + dt * 3.2);

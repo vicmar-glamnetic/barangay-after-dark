@@ -12,7 +12,7 @@ import * as THREE from 'three';
  */
 export type Sfx =
   | 'throw' | 'clang' | 'slap' | 'kick' | 'whiff' | 'pickup' | 'tag' | 'win' | 'lose'
-  | 'tick' | 'step' | 'giggle' | 'cheer' | 'ui' | 'thud' | 'perfect' | 'honk';
+  | 'tick' | 'step' | 'giggle' | 'cheer' | 'ui' | 'thud' | 'perfect' | 'honk' | 'rattle' | 'swing' | 'smash' | 'marble';
 
 const _v = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -246,6 +246,22 @@ export class AudioSys {
           this.tone('square', 415, 415, t + dt, 0.14, 0.12, out, 0.01);
           this.tone('square', 523, 523, t + dt, 0.14, 0.08, out, 0.01);
         }
+        break;
+      case 'rattle':
+        // candies shaking inside a clay pot
+        for (let i = 0; i < 6; i++) this.burst(t + i * 0.045 + r() * 0.02, 0.025, 'bandpass', 2600 + r() * 1500, 2600, 4, 0.22, out, 0.002);
+        break;
+      case 'swing':
+        this.burst(t, 0.28, 'bandpass', 300, 1400, 1.1, 0.45, out, 0.05);
+        break;
+      case 'smash':
+        this.burst(t, 0.35, 'lowpass', 2400, 500, 0.7, 0.8, out, 0.002);
+        [180, 260, 410].forEach((f, i) => this.tone('triangle', f, f * 0.7, t + i * 0.02, 0.25, 0.25, out));
+        for (let i = 0; i < 10; i++) this.burst(t + 0.15 + r() * 0.5, 0.03, 'bandpass', 3000 + r() * 2000, 3000, 3, 0.12, out, 0.002);
+        break;
+      case 'marble':
+        this.tone('sine', 2400 + r() * 600, 2000, t, 0.06, 0.25, out, 0.001);
+        this.tone('sine', 3700 + r() * 500, 3200, t, 0.04, 0.12, out, 0.001);
         break;
       case 'perfect':
         this.tone('sine', 1320, 1320, t, 0.12, 0.14, out);

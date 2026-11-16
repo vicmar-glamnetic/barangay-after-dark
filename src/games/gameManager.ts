@@ -1,11 +1,18 @@
 import * as THREE from 'three';
 import type { SaveStore } from '../core/save';
+import {
+  SLIPPERS, dailyChallenge, dailyReward, nextRank, nextStarGap, rankFor, rankIndex, starText, starsFor, today, yesterday,
+} from '../core/progression';
 import { Session } from '../net/session';
 import type { Menus } from '../ui/menus';
 import { NpcGroup } from '../world/npcs';
 import type { BaseGame } from './baseGame';
+import { Holen } from './holen';
 import { LangitLupa } from './langitLupa';
+import { LuksongBaka } from './luksongBaka';
 import { Patintero } from './patintero';
+import { Piko } from './piko';
+import { PukpokPalayok } from './pukpokPalayok';
 import { Sipa } from './sipa';
 import { Taguan } from './taguan';
 import { TumbangPreso } from './tumbangPreso';
@@ -25,7 +32,10 @@ export interface ManagerHooks {
  */
 export class GameManager {
   /** Order here = unlock order. Add new games to this list. */
-  readonly games: BaseGame[] = [new TumbangPreso(), new Sipa(), new Patintero(), new Taguan(), new LangitLupa()];
+  readonly games: BaseGame[] = [
+    new TumbangPreso(), new Sipa(), new Patintero(), new Taguan(), new LangitLupa(),
+    new Piko(), new LuksongBaka(), new Holen(), new PukpokPalayok(),
+  ];
   active: BaseGame | null = null;
   session: Session | null = null;
   private ended = false;
@@ -66,15 +76,38 @@ export class GameManager {
       if (!g.implemented) g.group.setLabel(g.name, 'Soon!', '#9aa3c7');
       else {
         const best = this.save.data.best[g.id];
-        g.group.setLabel(g.name, best !== undefined ? `Laro tayo!  Best ${best}` : 'Laro tayo!', g.layout.accent);
+        const daily = this.daily().gameId === g.id && !this.dailyDoneToday() ? '  HAMON!' : '';
+        g.group.setLabel(g.name, best !== undefined ? `${starText(this.save.data.stars[g.id] ?? 0)}  Best ${best}${daily}` : `Laro tayo!${daily}`, g.layout.accent);
       }
     });
   }
 
+  daily(): { gameId: string; target: number } {
+    return dailyChallenge(this.games.filter((g) => g.implemented).map((g) => g.id));
+  }
+
+  dailyDoneToday(): boolean {
+    return this.save.data.dailyDone === today();
+  }
+
+  /** "Tambay  ·  12 sa 21 ★" for the HUD chip. */
+  progressText(): string {
+    const total = Object.values(this.save.data.stars).reduce((a, b) => a + b, 0);
+    const max = this.games.filter((g) => g.implemented).length * 3;
+    return `${rankFor(this.save.data.tropaPoints).name}  ·  ${total}/${max}★${this.save.data.streak > 1 ? `  ·  ${this.save.data.streak} araw` : ''}`;
+  }
+
   hubObjective(): string {
     if (this.session) return `Nasa lobby ka (${this.session.code}). Buksan ang pause menu para makita ang lobby.`;
+    if (!this.dailyDoneToday()) {
+      const d = this.daily();
+      const g = this.gameById(d.gameId)!;
+      return `Hamon ngayon: ${g.name}, ${d.target}+ puntos (+${dailyReward(this.save.data.streak)} Tropa) ${g.where}`;
+    }
     const next = this.games.find((g, i) => this.isPlayable(i) && this.save.data.best[g.id] === undefined);
-    if (next) return `Hanapin ang naglalaro ng ${next.name} ${next.where}`;
+    if (next) return `Subukan ang ${next.name} ${next.where}`;
+    const unstarred = this.games.find((g) => g.implemented && (this.save.data.stars[g.id] ?? 0) < 3);
+    if (unstarred) return `Kunin ang ★★★ sa ${unstarred.name}! (${starText(this.save.data.stars[unstarred.id] ?? 0)})`;
     return 'Ipunin ang Tropa Points! Laruin ulit o mag-lobby kasama ang tropa.';
   }
 
@@ -256,13 +289,48 @@ export class GameManager {
     const g = this.active;
     if (!g || this.ended) return;
     this.ended = true;
-    const idx = this.games.indexOf(g);
+    const data = this.save.data;
+    const rankBefore = rankIndex(data.tropaPoints);
+    const prevBest = data.best[g.id];
+    // stars
+    const stars = starsFor(g.id, r.score);
+    const prevStars = data.stars[g.id] ?? 0;
+    if (stars > prevStars) data.stars[g.id] = stars;
+    // daily challenge
+    let dailyMsg: string | undefined;
+    const d = this.daily();
+    if (d.gameId === g.id && !this.dailyDoneToday() && r.score >= d.target) {
+      data.streak = data.dailyDone === yesterday() ? data.streak + 1 : 1;
+      data.dailyDone = today();
+      const bonus = dailyReward(data.streak - 1);
+      r.points += bonus;
+      dailyMsg = `Hamon ng Araw, tapos! +${bonus} Tropa  ·  ${data.streak} araw sunod-sunod`;
+    }
     this.save.addPoints(r.points);
     const isBest = this.save.recordScore(g.id, r.score);
-    const unlocked: string | undefined = undefined;
-    void idx;
+    // rank up (and tsinelas unlocks that come with it)
+    const rankAfter = rankIndex(data.tropaPoints);
+    let rankMsg: string | undefined;
+    if (rankAfter > rankBefore) {
+      const sl = SLIPPERS.find((x) => x.rank === rankAfter);
+      rankMsg = `Bagong ranggo: ${rankFor(data.tropaPoints).name}!${sl ? `  Bagong tsinelas: ${sl.name}` : ''}`;
+    }
+    // near-miss nudge: the closest goal you just missed
+    let nudge: string | undefined;
+    const gap = nextStarGap(g.id, r.score);
+    if (prevBest !== undefined && r.score < prevBest && prevBest - r.score <= Math.max(5, prevBest * 0.25)) nudge = `Kulang ka na lang ng ${prevBest - r.score} para sa best mo!`;
+    else if (gap && gap.gap <= Math.max(5, r.score * 0.3)) nudge = `Kulang ka na lang ng ${gap.gap} para sa ${starText(gap.stars)}!`;
+    else {
+      const nr = nextRank(data.tropaPoints);
+      if (nr) nudge = `${nr.at - data.tropaPoints} Tropa pa para maging ${nr.name}`;
+    }
+    this.save.persist();
     this.refreshLabels();
-    this.ctx.hud.setPoints(this.save.data.tropaPoints);
+    this.ctx.hud.setPoints(data.tropaPoints);
+    this.ctx.hud.setRank(this.progressText());
+    if (rankMsg) window.setTimeout(() => this.ctx.audio.play('win'), 1500);
+    const unlocked: string | undefined = undefined;
+    const prog = { stars, newStars: stars > prevStars, dailyMsg, rankMsg, nudge };
     this.ctx.audio.play(r.won ? 'win' : 'lose');
     const s = g.net;
     if (s) this.nextOpts.set(g.id, g.nextOpts());
@@ -271,7 +339,7 @@ export class GameManager {
     window.setTimeout(() => {
       if (this.active !== g) return;
       this.hooks.onModal(true);
-      const extra = { best: this.save.data.best[g.id] ?? r.score, isBest, unlocked };
+      const extra = { best: this.save.data.best[g.id] ?? r.score, isBest, unlocked, ...prog };
       if (!s) {
         this.menus.showEnd(r, extra, { onRetry: () => this.retry(), onBack: () => this.quitFromCard(), backLabel: 'Balik sa barangay' });
       } else {

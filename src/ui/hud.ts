@@ -10,12 +10,17 @@ export class Hud {
   private crosshair = el('div.crosshair');
   private pointsEl = el('div.points');
   private pointsNum = el('span', { text: '0' });
+  private rank = el('div.rank');
   private objective = el('div.objective');
   private stat = el('div.stat');
   private prompt = el('div.prompt.hidden');
   private toastEl = el('div.toast');
   private bigEl = el('div.big.hidden');
   private power = el('div.power.hidden');
+  private meter = el('div.meter.hidden');
+  private meterZone = el('i.zone');
+  private meterMark = el('b.mark');
+  private meterLabel = el('span.mlabel');
   private powerFill = el('i');
   private timer = el('div.timer.hidden');
   private fps = el('div.fps.hidden');
@@ -28,7 +33,8 @@ export class Hud {
   constructor(parent: HTMLElement, onPause: () => void) {
     this.pointsEl.append(el('span.star', { text: '★' }), this.pointsNum, el('span', { text: 'Tropa' }));
     this.power.append(this.powerFill);
-    this.root.append(this.crosshair, this.pointsEl, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
+    this.meter.append(this.meterZone, this.meterMark, this.meterLabel);
+    this.root.append(this.meter, this.crosshair, this.pointsEl, this.rank, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
     onTap(this.pauseBtn, onPause);
     parent.append(this.root);
     this.show(false);
@@ -47,6 +53,11 @@ export class Hud {
 
   setPoints(n: number): void {
     this.set('pts', this.pointsNum, String(n));
+  }
+
+  /** Rank / stars / streak line under the Tropa Points chip. */
+  setRank(text: string): void {
+    this.set('rank', this.rank, text);
   }
 
   setObjective(text: string): void {
@@ -88,6 +99,21 @@ export class Hud {
     if (v !== null) this.powerFill.style.width = `${Math.round(v * 100)}%`;
   }
 
+  /**
+   * Timing meter: a marker sweeping a bar with a green zone (Piko balance,
+   * Luksong Baka takeoff, etc). value/zone are 0..1. null hides it.
+   */
+  setMeter(value: number | null, zoneFrom = 0.4, zoneTo = 0.6, label = ''): void {
+    this.meter.classList.toggle('hidden', value === null);
+    if (value === null) return;
+    this.meterMark.style.left = `${(Math.max(0, Math.min(1, value)) * 100).toFixed(1)}%`;
+    this.meterZone.style.left = `${zoneFrom * 100}%`;
+    this.meterZone.style.width = `${(zoneTo - zoneFrom) * 100}%`;
+    const inZone = value >= zoneFrom && value <= zoneTo;
+    this.meter.classList.toggle('ok', inZone);
+    this.set('mlabel', this.meterLabel, label);
+  }
+
   setTimer(text: string | null): void {
     this.timer.classList.toggle('hidden', text === null);
     if (text !== null) this.set('timer', this.timer, text);
@@ -110,6 +136,7 @@ export class Hud {
   clearGameWidgets(): void {
     this.setBig(null);
     this.setPower(null);
+    this.setMeter(null);
     this.setTimer(null);
     this.setStat('');
   }

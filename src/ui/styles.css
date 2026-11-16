@@ -278,3 +278,45 @@ button { font-family: var(--font); }
 .field .hint { font-size: 12px !important; margin: 4px 0 0 !important; }
 .field .err { font-size: 13px !important; margin: 2px 0 0 !important; }
 .roster .face-thumb { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 2px solid; flex: none; }
+
+/* ------------------------------------------------------------------ timing meter */
+.meter {
+  position: absolute; bottom: calc(18% + var(--safe-b)); left: 50%; transform: translateX(-50%);
+  width: min(56vw, 380px); height: 22px; border-radius: 12px; background: rgba(0, 0, 0, 0.55); border: 2px solid rgba(255, 255, 255, 0.55);
+}
+.meter .zone { position: absolute; top: 2px; bottom: 2px; border-radius: 8px; background: rgba(6, 214, 160, 0.55); }
+.meter .mark { position: absolute; top: -6px; width: 6px; height: 30px; margin-left: -3px; border-radius: 3px; background: #fff; box-shadow: 0 0 8px rgba(0, 0, 0, 0.6); }
+.meter.ok .mark { background: var(--good); box-shadow: 0 0 12px var(--good); }
+.meter .mlabel { position: absolute; left: 50%; top: -30px; transform: translateX(-50%); font-weight: 800; font-size: 17px; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+/* blindfold for Pukpok Palayok */
+.blind {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s;
+  background:
+    repeating-linear-gradient(90deg, rgba(60, 20, 30, 0.25) 0 3px, transparent 3px 7px),
+    radial-gradient(ellipse at 50% 100%, rgba(40, 10, 20, 0.86), rgba(10, 2, 6, 0.985) 70%);
+}
+.blind.on { opacity: 1; }
+.shout {
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font-size: clamp(30px, min(8vw, 11vh), 72px);
+  font-weight: 800; color: #ffd166; text-shadow: 0 4px 0 #6a2c00; opacity: 0; transition: opacity 0.15s; pointer-events: none; white-space: nowrap;
+}
+.shout.on { opacity: 1; }
+
+/* ------------------------------------------------------------------ progression */
+.rank {
+  position: absolute; top: calc(48px + var(--safe-t)); left: calc(14px + var(--safe-l));
+  font-weight: 800; font-size: 13px; color: var(--accent); text-shadow: 0 1px 3px #000;
+}
+.rank:empty { display: none; }
+.stars { font-size: 40px; line-height: 1; margin: 4px 0 2px; letter-spacing: 6px; }
+.stars span { color: rgba(255, 255, 255, 0.18); display: inline-block; }
+.stars span.on { color: var(--accent); text-shadow: 0 0 16px rgba(255, 209, 102, 0.8); animation: starPop 0.45s cubic-bezier(0.2, 1.8, 0.4, 1) both; }
+@keyframes starPop { from { transform: scale(0) rotate(-90deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.badge { margin: 6px auto; padding: 6px 12px 4px; border-radius: 12px; font-weight: 800; font-size: 15px; max-width: 100%; }
+.badge.rankup { background: linear-gradient(90deg, #f72585, #ff8c42); color: #fff; animation: cardIn 0.4s 0.6s both; }
+.badge.daily { background: rgba(6, 214, 160, 0.2); color: var(--good); border: 1px solid var(--good); }
+.nudge { color: var(--accent) !important; font-weight: 800; margin-top: 4px; }
+.swatches { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); cursor: pointer; padding: 0; }
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.swatch.locked { filter: grayscale(1) brightness(0.45); }

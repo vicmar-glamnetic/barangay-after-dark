@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { labelTexture, radialTexture } from './textures';
 import type { BlobShadows } from './shadows';
 
-export type KidMode = 'idle' | 'wave' | 'cheer' | 'run' | 'carry' | 'crouch' | 'count' | 'still' | 'guard';
+export type KidMode = 'idle' | 'wave' | 'cheer' | 'run' | 'carry' | 'crouch' | 'count' | 'still' | 'guard' | 'baka';
 
 export interface KidLook {
   shirt: number;
@@ -83,6 +83,9 @@ function faceMask(): THREE.Texture {
   return maskTex;
 }
 
+/** Hip height: the body bone pivots here. */
+const HIP = 0.55;
+
 /** Bone indices in each kid's skeleton. */
 const B_ROOT = 0, B_BODY = 1, B_ARM_L = 2, B_ARM_R = 3, B_LEG_L = 4, B_LEG_R = 5;
 
@@ -124,6 +127,8 @@ export class Kid {
   private lookDir = 1;
   /** Horizontal speed (m/s); drives the run cycle. */
   speed = 0;
+  /** Luksong Baka: 0 (lowest) to 4 (tallest). */
+  bakaLevel = 2;
   phase = Math.random() * 10;
   private removeShadow?: () => void;
 
@@ -176,11 +181,13 @@ export class Kid {
     // shoulders, legs at the hips. All parts are baked into one geometry.
     const rootBone = new THREE.Bone();
     rootBone.add(this.body);
-    this.armL.position.set(0.235, 0.95, 0);
-    this.armR.position.set(-0.235, 0.95, 0);
+    this.body.position.set(0, HIP, 0); // pivot at the hips so the kid can bend over
+    this.armL.position.set(0.235, 0.95 - HIP, 0);
+    this.armR.position.set(-0.235, 0.95 - HIP, 0);
+    this.body.add(this.armL, this.armR);
     this.legL.position.set(0.09, 0.55, 0);
     this.legR.position.set(-0.09, 0.55, 0);
-    rootBone.add(this.armL, this.armR, this.legL, this.legR);
+    rootBone.add(this.legL, this.legR);
 
     const all: [THREE.BufferGeometry, number, number][] = parts.map(([g, c]) => [g, c, B_BODY]);
     for (const [bone, x] of [[B_ARM_L, 0.235], [B_ARM_R, -0.235]]) {
@@ -224,7 +231,7 @@ export class Kid {
       emissiveIntensity: 0.35, // stays readable at night
     });
     const m = new THREE.Mesh(faceGeometry(), mat);
-    m.position.set(0, 1.14, 0); // head center, in body-bone space
+    m.position.set(0, 1.14 - HIP, 0); // head center, in body-bone space
     this.body.add(m);
     this.faceMesh = m;
   }
@@ -350,15 +357,25 @@ export class Kid {
         lean = 0.12;
         break;
       }
+      case 'baka': {
+        // bent over for Luksong Baka: lower levels bend further
+        const lvl = Math.max(0, Math.min(4, this.bakaLevel));
+        lean = [1.45, 1.3, 1.15, 0.95, 0.75][lvl];
+        armL = armR = -0.9 + lean * 0.35; // hands toward the knees
+        armLz = 0.12;
+        armRz = -0.12;
+        legL = legR = -0.12;
+        bob = Math.sin(p * 1.2) * 0.008;
+        break;
+      }
       case 'still':
         break;
     }
-    b.position.y = bob;
+    b.position.y = HIP + bob;
     b.rotation.x = lean;
     b.rotation.y += (twist - b.rotation.y) * Math.min(1, dt * 6);
     // legs follow the body upward on hops/jumps (crouch keeps feet planted)
     this.legL.position.y = this.legR.position.y = 0.55 + Math.max(0, bob);
-    this.armL.position.y = this.armR.position.y = 0.95 + bob;
     const k = Math.min(1, dt * 14);
     this.armL.rotation.x += (armL - this.armL.rotation.x) * k;
     this.armR.rotation.x += (armR - this.armR.rotation.x) * k;

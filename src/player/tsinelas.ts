@@ -57,4 +57,7 @@ export function tsinelasGeometry(strap = 0x1f6fb2, top = 0x2f86d6): THREE.Buffer
   return g;
 }
 
+/** The player's chosen tsinelas colors (Settings). Tumbang Preso throws use these. */
+export const slipperColors = { strap: 0x1f6fb2, top: 0x2f86d6 };
+
 export const tsinelasMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });

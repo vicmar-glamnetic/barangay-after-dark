@@ -154,9 +154,62 @@ export abstract class BaseGame {
   }
 
   /** Host side: a client (or the host itself) sent an action. */
-  protected onHostMsg(_from: string, _d: GameData): void {}
+  protected onHostMsg(from: string, d: GameData): void {
+    this.battleHostMsg(from, d);
+  }
   /** Every client (including the host): state or event from the host. */
-  protected onClientMsg(_d: GameData): void {}
+  protected onClientMsg(d: GameData): void {
+    this.battleClientMsg(d);
+  }
+
+  // ------------------------------------------------------------------ score battle
+  // For games where everyone plays their own copy at the same time (Piko,
+  // Luksong Baka, Holen, Pukpok Palayok): each client reports its score, the
+  // host keeps a live board and ends the game once everyone is done.
+
+  private battleTable = new Map<string, { score: number; done: boolean; won: boolean; lines: string[] }>();
+  private battleEnded = false;
+  /** Live leaderboard: [id, score, done], best first. */
+  protected battleBoard: [string, number, boolean][] = [];
+
+  protected battleReset(): void {
+    this.battleTable.clear();
+    this.battleBoard = [];
+    this.battleEnded = false;
+    if (this.isHost) for (const id of this.roster()) this.battleTable.set(id, { score: 0, done: false, won: false, lines: [] });
+  }
+
+  /** Client: report my running score. done = my run is over (lines/won used for the end card). */
+  protected battleReport(score: number, done: boolean, won = false, lines: string[] = []): void {
+    this.toHost({ k: 'bt', score, done, won, lines });
+  }
+
+  private battleHostMsg(from: string, d: GameData): void {
+    if (d.k !== 'bt' || this.battleEnded) return;
+    const lines = Array.isArray(d.lines) ? d.lines.slice(0, 4).map((x) => String(x).slice(0, 60)) : [];
+    this.battleTable.set(from, { score: Math.max(0, Math.round(Number(d.score) || 0)), done: !!d.done, won: !!d.won, lines });
+    this.toAll({ k: 'bb', rows: [...this.battleTable].map(([id, r]) => [id, r.score, r.done]) });
+  }
+
+  private battleClientMsg(d: GameData): void {
+    if (d.k === 'bb') this.battleBoard = (d.rows as [string, number, boolean][]).slice().sort((a, b) => b[1] - a[1]);
+  }
+
+  /** Host: call every frame. Ends the game once everyone still in the lobby is done. */
+  protected battleCheck(): void {
+    if (!this.isHost || this.battleEnded) return;
+    const ids = new Set(this.roster());
+    for (const id of [...this.battleTable.keys()]) if (!ids.has(id)) this.battleTable.delete(id);
+    if (!this.battleTable.size || ![...this.battleTable.values()].every((r) => r.done)) return;
+    this.battleEnded = true;
+    this.endWith([...this.battleTable].map(([id, r]) => ({ id, score: r.score, won: r.won, lines: r.lines })));
+  }
+
+  /** "Juan 30 · Ana 20*" (star = still playing). Empty in solo. */
+  protected battleText(): string {
+    if (!this.multiplayer || this.battleBoard.length < 2) return '';
+    return this.battleBoard.slice(0, 4).map(([id, s, done]) => `${this.nameOf(id)} ${s}${done ? '' : '*'}`).join(' · ');
+  }
 
   // ------------------------------------------------------------------ ending
 

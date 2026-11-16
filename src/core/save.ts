@@ -28,6 +28,13 @@ export interface SaveData {
   unlocked: number;
   best: Record<string, number>;
   plays: Record<string, number>;
+  /** Best star count (0-3) per game. */
+  stars: Record<string, number>;
+  /** Day ("YYYY-MM-DD") the daily challenge was last completed, and the streak of days in a row. */
+  dailyDone: string;
+  streak: number;
+  /** Chosen tsinelas color index (see core/progression SLIPPERS). */
+  slipper: number;
   settings: Settings;
 }
 
@@ -56,6 +63,10 @@ export class SaveStore {
       unlocked: 1,
       best: {},
       plays: {},
+      stars: {},
+      dailyDone: '',
+      streak: 0,
+      slipper: 0,
       settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false },
     };
   }
@@ -74,6 +85,10 @@ export class SaveStore {
     };
     d.best = recs(raw.best);
     d.plays = recs(raw.plays);
+    d.stars = recs(raw.stars);
+    d.dailyDone = typeof raw.dailyDone === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dailyDone) ? raw.dailyDone : '';
+    d.streak = Math.round(num(raw.streak, 0, 0, 9999));
+    d.slipper = Math.round(num(raw.slipper, 0, 0, 99));
     const s = raw.settings as Partial<Settings> | undefined;
     if (s) {
       d.settings.sensitivity = num(s.sensitivity, 1, 0.2, 3);

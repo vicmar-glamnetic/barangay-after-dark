@@ -32,6 +32,12 @@ export class Player {
 
   walkSpeed = 3.7;
   runSpeed = 6.4;
+  /** Added to eye height (negative = crouch, used by Holen). */
+  eyeOffset = 0;
+  /** Disable sprinting (blindfolded in Pukpok Palayok). */
+  canRun = true;
+  /** Disable the physics jump (Luksong Baka reads the jump button itself). */
+  jumpEnabled = true;
 
   private vel = new THREE.Vector3();
   private velY = 0;
@@ -89,7 +95,7 @@ export class Player {
     // Desired horizontal velocity in world space
     const target = new THREE.Vector3();
     if (this.moveEnabled) {
-      const speed = inp.run ? this.runSpeed : this.walkSpeed;
+      const speed = inp.run && this.canRun ? this.runSpeed : this.walkSpeed;
       const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
       // forward = (-sin, -cos), right = (cos, -sin)
       target.set(-sin * inp.moveY + cos * inp.moveX, 0, -cos * inp.moveY - sin * inp.moveX).multiplyScalar(speed);
@@ -99,7 +105,7 @@ export class Player {
 
     // Gravity, coyote time and jump buffering for forgiving jumps on touch
     this.coyote = this.grounded ? 0.12 : Math.max(0, this.coyote - dt);
-    this.jumpBuffer = inp.pressed('jump') && this.moveEnabled ? 0.14 : Math.max(0, this.jumpBuffer - dt);
+    this.jumpBuffer = inp.pressed('jump') && this.moveEnabled && this.jumpEnabled ? 0.14 : Math.max(0, this.jumpBuffer - dt);
     if (this.jumpBuffer > 0 && this.coyote > 0) {
       this.velY = 6.6;
       this.coyote = 0;
@@ -161,7 +167,7 @@ export class Player {
       this.teleport(-1.5, 0.2, 7.2, 0, 0);
       return;
     }
-    this.camera.position.set(this.position.x, this.position.y + EYE + this.bob + this.dip, this.position.z);
+    this.camera.position.set(this.position.x, this.position.y + EYE + this.eyeOffset + this.bob + this.dip, this.position.z);
     this.camera.rotation.set(this.pitch, this.yaw, this.roll, 'YXZ');
     const base = (this.camera.userData.baseFov as number | undefined) ?? this.camera.fov;
     const fov = base + this.fovKick;

@@ -7,6 +7,9 @@ import { el } from './dom';
  */
 export class Overlays {
   private fadeEl = el('div.fade');
+  private blindEl = el('div.blind');
+  private shoutEl = el('div.shout');
+  private shoutT = 0;
   readonly rotate = el(
     'div.rotate',
     {},
@@ -16,7 +19,22 @@ export class Overlays {
   );
 
   constructor(parent: HTMLElement) {
+    parent.prepend(this.blindEl, this.shoutEl); // under the HUD and menus
     parent.append(this.fadeEl, this.rotate);
+  }
+
+  /** Pukpok Palayok blindfold (the screen goes almost black). */
+  blind(on: boolean): void {
+    this.blindEl.classList.toggle('on', on);
+    if (!on) this.shoutEl.classList.remove('on');
+  }
+
+  /** Big shouted hint ("Kaliwa!") shown over the blindfold. */
+  shout(text: string, ms = 900): void {
+    this.shoutEl.textContent = text;
+    this.shoutEl.classList.add('on');
+    clearTimeout(this.shoutT);
+    this.shoutT = window.setTimeout(() => this.shoutEl.classList.remove('on'), ms);
   }
 
   fade(on: boolean, text = ''): void {
