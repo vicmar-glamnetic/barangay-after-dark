@@ -20,7 +20,7 @@ To test on a real phone, connect it to the same Wi-Fi and open the **Network** U
 | `npm run preview` | Serve the built `dist/` locally (service worker active) |
 | `npm run typecheck` | TypeScript only |
 | `npm run icons` | Regenerate the PWA icons in `public/icons/` |
-| `npm run deploy` | Build and publish `dist/` to the `gh-pages` branch (GitHub Pages) |
+| `npm run deploy` | Publish to Vercel production (haringkanto.vercel.app) |
 
 ### Debug URL flags
 
@@ -109,7 +109,6 @@ scripts/make-icons.mjs  dependency-free PNG icon generator
 
 ```bash
 npm run deploy      # Vercel production (project "haringkanto", Vercel builds it with Vite)
-npm run deploy:gh   # optional: GitHub Pages copy on the gh-pages branch
 ```
 
 ### Other hosts
