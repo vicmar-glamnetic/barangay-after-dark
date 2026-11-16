@@ -120,13 +120,7 @@ The build is a static site in `dist/`. `vite.config.ts` uses `base: './'`, so th
 **Netlify:** build command `npm run build`, publish directory `dist`.
 Or drag and drop the `dist/` folder into the Netlify dashboard.
 
-**GitHub Pages:**
-
-```bash
-npm run deploy    # builds, then force-pushes dist/ to the gh-pages branch of "origin"
-```
-
-The first time, enable Pages for the `gh-pages` branch (repo Settings, Pages). The game is then served at `https://<user>.github.io/<repo>/`.
+**Any static host (e.g. GitHub Pages):** run `npm run build` and upload the contents of `dist/`.
 
 ### Add to Home Screen (fullscreen)
 
