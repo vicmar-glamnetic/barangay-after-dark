@@ -49,6 +49,8 @@ export abstract class BaseGame {
   opts: Record<string, unknown> = {};
 
   private poseVecs = new Map<string, THREE.Vector3>();
+  /** Every player's final row from the last game (the manager uses it for Torneo standings). */
+  lastRows: EndRow[] = [];
 
   attach(ctx: GameContext, group: NpcGroup): void {
     this.ctx = ctx;
@@ -220,6 +222,7 @@ export abstract class BaseGame {
 
   /** Called on every client with the host's final rows. Subclasses build their result in finishMine(). */
   private finishFromRows(rows: EndRow[], extra: Record<string, unknown>): void {
+    this.lastRows = rows;
     const mine = rows.find((r) => r.id === this.selfId);
     if (!mine) return;
     const sorted = [...rows].sort((a, b) => b.score - a.score);

@@ -292,8 +292,8 @@ button { font-family: var(--font); }
 .blind {
   position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s;
   background:
-    repeating-linear-gradient(90deg, rgba(60, 20, 30, 0.25) 0 3px, transparent 3px 7px),
-    radial-gradient(ellipse at 50% 100%, rgba(40, 10, 20, 0.86), rgba(10, 2, 6, 0.985) 70%);
+    repeating-linear-gradient(90deg, rgba(30, 8, 14, 0.3) 0 3px, transparent 3px 7px),
+    radial-gradient(ellipse at 50% 100%, rgba(16, 4, 8, 0.97), rgba(3, 1, 2, 0.997) 60%);
 }
 .blind.on { opacity: 1; }
 .shout {
@@ -325,3 +325,67 @@ button { font-family: var(--font); }
   font-size: clamp(34px, 7vw, 66px); color: var(--accent); line-height: 1; margin-bottom: 2px;
   text-shadow: 0 0 24px rgba(255, 209, 102, 0.8); animation: logoFloat 3.4s ease-in-out infinite;
 }
+
+/* ------------------------------------------------------------------ night events */
+.event-chip {
+  position: absolute; top: calc(70px + var(--safe-t)); left: calc(12px + var(--safe-l));
+  font-weight: 800; font-size: 13px; padding: 4px 10px 2px; border-radius: 999px;
+  background: rgba(255, 209, 102, 0.18); border: 1px solid var(--accent); color: var(--accent);
+  animation: pulse3 1.6s ease-in-out infinite;
+}
+.event-chip.brownout { background: rgba(0, 0, 0, 0.6); border-color: #9aa3c7; color: #dfe4ff; }
+.event-chip.ulan { background: rgba(76, 201, 240, 0.18); border-color: #4cc9f0; color: #bdeeff; }
+.event-chip.sorbetero { background: rgba(6, 214, 160, 0.18); border-color: var(--good); color: var(--good); }
+@keyframes pulse3 { 50% { filter: brightness(1.35); } }
+
+/* ------------------------------------------------------------------ end card extras */
+.best { font-weight: 800; color: var(--muted); margin: 2px 0 4px; }
+.best.up { color: var(--good); font-size: 19px; }
+.badge.ach { background: linear-gradient(90deg, #7b2cbf, #4361ee); color: #fff; animation: cardIn 0.4s 0.8s both; }
+.badge.rival { background: rgba(255, 140, 66, 0.16); color: #ffc49a; border: 1px solid var(--accent-2); font-size: 14px; }
+.badge.event { background: rgba(255, 209, 102, 0.14); color: var(--accent); border: 1px dashed var(--accent); font-size: 14px; }
+.tour { margin: 8px auto; padding: 8px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); text-align: left; font-weight: 700; max-width: 320px; }
+.tour b { display: block; color: var(--accent); text-align: center; margin-bottom: 4px; }
+.card .hint { font-size: 13px; }
+
+/* ------------------------------------------------------------------ libro ng barangay */
+.card.book { width: min(520px, 100%); }
+.wallet { font-weight: 800; color: var(--accent); margin: 2px 0 8px; }
+.seg.tabs { display: flex; margin: 0 auto 10px; width: fit-content; max-width: 100%; }
+.seg.tabs button { padding: 7px 12px 4px; }
+.book .list { text-align: left; }
+.book h3 { margin: 14px 0 4px; font-size: 17px; color: var(--accent); }
+.book .item { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); margin: 6px 0; }
+.book .item b { font-size: 16px; }
+.book .item span { font-size: 15px; }
+.book .item small { color: var(--muted); font-size: 13px; }
+.book .item.done { background: rgba(6, 214, 160, 0.12); border: 1px solid rgba(6, 214, 160, 0.5); }
+.book .bar { display: block; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; margin: 3px 0; }
+.book .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--good), var(--accent)); }
+.book .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.book .bdg { padding: 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; gap: 2px; opacity: 0.6; }
+.book .bdg.got { opacity: 1; background: rgba(123, 44, 191, 0.25); border-color: #9d4edd; }
+.book .bdg b { font-size: 15px; }
+.book .bdg small { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.book .bdg i { font-size: 12px; font-style: normal; color: var(--accent); }
+.shop-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); margin: 5px 0; }
+.shop-row > span:nth-child(2) { flex: 1; font-weight: 700; }
+.shop-row .swatch { cursor: default; flex: none; }
+.shop-row .tag { flex: none; min-width: 96px; text-align: center; font-weight: 800; color: var(--accent); background: rgba(12, 16, 38, 0.8); border-radius: 10px; padding: 3px 8px 1px; }
+.shop-row .btn { min-width: 84px; }
+.roster .row small.sub { margin-left: auto; color: var(--accent); font-weight: 800; font-size: 13px; }
+
+/* ------------------------------------------------------------------ in-app browser escape */
+.screen.escape { z-index: 60; pointer-events: auto; }
+.screen.escape p b { color: var(--ink); }
+
+/* ------------------------------------------------------------------ online top 20 */
+.top-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin-bottom: 8px; }
+.top-ctl .game-sel { width: auto; flex: 1 1 160px; }
+.top-ctl .game-sel option { color: #1a1230; }
+.board .brow { display: flex; align-items: center; gap: 10px; padding: 5px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); margin: 4px 0; font-weight: 700; }
+.board .brow b { width: 28px; text-align: right; color: var(--accent); }
+.board .brow span { flex: 1; }
+.board .brow i { font-style: normal; font-weight: 800; }
+.board .brow.me { background: rgba(255, 209, 102, 0.16); border: 1px solid var(--accent); }
+.board .brow:nth-child(-n + 3) b { font-size: 18px; }

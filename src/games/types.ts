@@ -23,6 +23,8 @@ export interface GameResult {
   lines: string[];
   /** Text for the "Copy score" button. */
   shareText: string;
+  /** Special feats for badges, e.g. 'untouched' (Tumbang Preso), 'flawless' (Patintero). */
+  feats?: string[];
 }
 
 /** Everything a mini-game is allowed to touch. */

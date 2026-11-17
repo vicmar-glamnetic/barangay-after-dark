@@ -12,7 +12,7 @@ import * as THREE from 'three';
  */
 export type Sfx =
   | 'throw' | 'clang' | 'slap' | 'kick' | 'whiff' | 'pickup' | 'tag' | 'win' | 'lose'
-  | 'tick' | 'step' | 'giggle' | 'cheer' | 'ui' | 'thud' | 'perfect' | 'honk' | 'rattle' | 'swing' | 'smash' | 'marble';
+  | 'tick' | 'step' | 'giggle' | 'cheer' | 'ui' | 'thud' | 'perfect' | 'honk' | 'rattle' | 'swing' | 'smash' | 'marble' | 'bell' | 'badge';
 
 const _v = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -267,7 +267,44 @@ export class AudioSys {
         this.tone('sine', 1320, 1320, t, 0.12, 0.14, out);
         this.tone('sine', 1760, 1760, t + 0.07, 0.2, 0.12, out);
         break;
+      case 'bell':
+        // sorbetero hand bell: ting-ting-ting
+        for (let i = 0; i < 3; i++) {
+          this.tone('sine', 2350, 2300, t + i * 0.16, 0.35, 0.22, out, 0.002);
+          this.tone('sine', 5600, 5500, t + i * 0.16, 0.15, 0.06, out, 0.002);
+        }
+        break;
+      case 'badge':
+        [784, 988, 1175, 1568].forEach((f, i) => this.tone('triangle', f, f, t + i * 0.09, 0.3, 0.18, out));
+        break;
     }
+  }
+
+  // ---------------------------------------------------------------- rain
+
+  private rainGain: GainNode | null = null;
+
+  /** Looping rain hiss (fades in and out). */
+  setRain(on: boolean): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    if (!this.rainGain) {
+      if (!on) return;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 500;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 5200;
+      this.rainGain = ctx.createGain();
+      this.rainGain.gain.value = 0;
+      src.connect(hp).connect(lp).connect(this.rainGain).connect(this.amb);
+      src.start();
+    }
+    this.rainGain.gain.setTargetAtTime(on ? 0.16 : 0, ctx.currentTime, 1.2);
   }
 
   // ---------------------------------------------------------------- ambience

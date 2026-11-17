@@ -5,7 +5,8 @@ import { device } from './core/device';
 import { Input } from './core/input';
 import { Loop } from './core/loop';
 import { PerfGovernor } from './core/perf';
-import { SLIPPERS, rankIndex } from './core/progression';
+import { checkBadges, rollQuests, slipperChoices, type Badge } from './core/meta';
+import { dailyReward } from './core/progression';
 import { slipperColors } from './player/tsinelas';
 import { Physics } from './core/physics';
 import { Renderer } from './core/renderer';
@@ -25,6 +26,8 @@ import { Sky } from './world/sky';
 import { Ambient } from './world/ambient';
 import { Traffic } from './world/traffic';
 import { FONT } from './world/textures';
+import { NightEvents } from './world/nightEvents';
+import { escapeInAppBrowser } from './ui/inAppEscape';
 
 type AppState = 'loading' | 'title' | 'play';
 const FAR_AWAY = new THREE.Vector3(0, 50, 0);
@@ -57,6 +60,8 @@ class App {
   private avatars!: Avatars;
   private ambient!: Ambient;
   private traffic!: Traffic;
+  private events!: NightEvents;
+  private eventChipT = 0;
   private perf = new PerfGovernor(
     (fx) => this.applyPerf(fx),
     () => this.r.gpuMs >= 0 && this.r.gpuMs < 7 && this.loop.cpuMs < 7,
@@ -87,6 +92,22 @@ class App {
       onUiSound: () => this.audio.play('ui'),
       onFace: (face) => this.games?.session?.setFace(face),
       onSlipper: (i) => this.applySlipper(i),
+      bookInfo: () => {
+        rollQuests(this.save.data);
+        const d = this.games.daily();
+        return {
+          games: this.games.games.filter((g) => g.implemented).map((g) => ({ id: g.id, name: g.name })),
+          quests: this.games.quests(),
+          daily: { name: this.games.gameById(d.gameId)?.name ?? d.gameId, target: d.target, done: this.games.dailyDoneToday(), streak: this.save.data.streak, reward: dailyReward(this.save.data.streak) },
+          rival: (id: string) => this.games.rivalText(id),
+        };
+      },
+      onShop: () => {
+        this.applySlipper(this.save.data.slipper);
+        this.games.session?.setSub(this.games.myTag);
+        this.showBadges(checkBadges(this.save.data, null));
+        this.save.persist();
+      },
     }, () => this.input.usingTouch);
     this.overlays = new Overlays(this.ui);
     this.setTouchMode(this.input.usingTouch);
@@ -107,6 +128,11 @@ class App {
       } else this.audio.resume();
     });
     this.preventBrowserGestures();
+    escapeInAppBrowser(this.ui);
+    // keep the game fullscreen: any tap while playing re-enters it if the browser dropped out
+    document.addEventListener('click', () => {
+      if (this.state === 'play') this.goFullscreen();
+    }, true);
     this.boot().catch((e) => {
       console.error(e);
       document.querySelector('.start-btn')!.textContent = 'May error. I-refresh ang page.';
@@ -132,6 +158,14 @@ class App {
     this.avatars = new Avatars(scene, this.blobs, this.audio);
     this.ambient = new Ambient(scene, this.world.lampHeads, q);
     this.traffic = new Traffic(scene, this.blobs, this.audio);
+    this.events = new NightEvents(scene, this.lighting, (k) => this.world.setPower(k), this.audio, this.blobs, q);
+    this.events.onChange = (ev) => {
+      if (this.state !== 'play') return;
+      if (ev) {
+        this.hud.toast(ev.start, 'good', 2600);
+        this.audio.play(ev.id === 'sorbetero' ? 'bell' : 'perfect');
+      } else this.hud.toast('Tapos na ang event. Abangan ang susunod!', 'small', 1800);
+    };
     this.perf.setEnabled(this.save.data.settings.autoFps);
     this.games = new GameManager(
       {
@@ -153,6 +187,8 @@ class App {
       this.save,
       this.menus,
       {
+        event: () => this.events?.current ?? null,
+        onBadges: (b) => this.showBadges(b),
         onModal: (open) => {
           if (open) {
             this.input.clearAll();
@@ -196,6 +232,9 @@ class App {
     this.player.teleport(sp.pos.x, sp.pos.y, sp.pos.z, sp.yaw);
     this.hud.setObjective(this.games.hubObjective());
     this.hud.toast(this.input.usingTouch ? 'Joystick para lumakad, drag para tumingin' : 'WASD para lumakad, mouse para tumingin', 'small', 3200);
+    // iPhone Safari has no fullscreen API: the home-screen app is the only way
+    if (device.isIOS && !device.isStandalone && !device.inApp && !document.fullscreenEnabled)
+      window.setTimeout(() => this.hud.toast('Para full screen: Share → Add to Home Screen', 'small', 4000), 3600);
     this.input.requestLock();
   }
 
@@ -228,10 +267,18 @@ class App {
     this.input.requestLock();
   }
 
-  /** Tsinelas color (only colors unlocked by rank are allowed). */
+  /** New badges: one toast each, a little apart. */
+  private showBadges(list: Badge[]): void {
+    list.forEach((b, i) => window.setTimeout(() => {
+      this.hud.toast(`Badge: ${b.name}! +${b.barya} Barya`, 'good', 2200);
+      this.audio.play('badge');
+    }, 2300 * i + 400));
+  }
+
+  /** Tsinelas color (only colors unlocked by rank or bought are allowed). */
   private applySlipper(i: number): void {
-    const allowed = SLIPPERS.filter((s) => s.rank <= rankIndex(this.save.data.tropaPoints));
-    const s = SLIPPERS[i] && SLIPPERS[i].rank <= rankIndex(this.save.data.tropaPoints) ? SLIPPERS[i] : allowed[0];
+    const all = slipperChoices(this.save.data);
+    const s = all[i]?.unlocked ? all[i] : all[0];
     this.hand.setSlipperColors(s.strap, s.top);
     slipperColors.strap = s.strap;
     slipperColors.top = s.top;
@@ -267,7 +314,7 @@ class App {
   }
 
   private goFullscreen(): void {
-    if (!device.isMobile || device.isStandalone) return;
+    if (device.isStandalone || document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement) return;
     const de = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
     const req = de.requestFullscreen?.bind(de) ?? de.webkitRequestFullscreen?.bind(de);
     if (!req) return; // iPhone Safari: use "Add to Home Screen" for fullscreen
@@ -292,6 +339,20 @@ class App {
       },
       { passive: false },
     );
+  }
+
+  /** HUD chip for the running night event, with time left. */
+  private updateEventChip(dt: number): void {
+    this.eventChipT -= dt;
+    if (this.eventChipT > 0) return;
+    this.eventChipT = 0.5;
+    const ev = this.events.current;
+    if (!ev || this.state !== 'play' || (ev.id === 'sorbetero' && !this.events.cartVisible)) {
+      this.hud.setEvent(null);
+      return;
+    }
+    const sec = Math.max(0, Math.ceil(this.events.leftMs / 1000));
+    this.hud.setEvent(`${ev.chip}  ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`, ev.id);
   }
 
   // ------------------------------------------------------------------ frame
@@ -331,6 +392,10 @@ class App {
         s.setLocalPose(p.x, p.y, p.z, this.player.yaw, anim);
         s.update(dt);
       }
+      if (!this.games.playing && !this.paused && !this.menus.isOpen && this.events.nearCart(this.player.position) && this.save.data.sorbetesSlot !== this.events.slot) {
+        this.games.catchSorbetes(this.events.slot);
+        this.events.hideCart();
+      }
       this.avatars.setVisible(!!s && this.games.networked);
       this.avatars.update(dt, t, s);
       this.hand.update(dt, this.player.speed);
@@ -342,6 +407,8 @@ class App {
       this.world.update(dt, t);
       this.ambient.update(t, this.r.renderer.getPixelRatio());
       this.traffic.update(dt, this.state === 'play' ? this.player.position : FAR_AWAY);
+      this.events.update(dt, t, cam.position, this.save.data.sorbetesSlot);
+      this.updateEventChip(dt);
       this.lighting.update(dt, this.state === 'play' ? this.player.position : cam.position);
       this.blobs.update();
       this.sky.update(cam, t);

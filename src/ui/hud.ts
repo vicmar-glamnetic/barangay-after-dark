@@ -11,6 +11,7 @@ export class Hud {
   private pointsEl = el('div.points');
   private pointsNum = el('span', { text: '0' });
   private rank = el('div.rank');
+  private eventEl = el('div.event-chip.hidden');
   private objective = el('div.objective');
   private stat = el('div.stat');
   private prompt = el('div.prompt.hidden');
@@ -34,7 +35,7 @@ export class Hud {
     this.pointsEl.append(el('span.star', { text: '★' }), this.pointsNum, el('span', { text: 'Tropa' }));
     this.power.append(this.powerFill);
     this.meter.append(this.meterZone, this.meterMark, this.meterLabel);
-    this.root.append(this.meter, this.crosshair, this.pointsEl, this.rank, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
+    this.root.append(this.meter, this.crosshair, this.pointsEl, this.rank, this.eventEl, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
     onTap(this.pauseBtn, onPause);
     parent.append(this.root);
     this.show(false);
@@ -58,6 +59,17 @@ export class Hud {
   /** Rank / stars / streak line under the Tropa Points chip. */
   setRank(text: string): void {
     this.set('rank', this.rank, text);
+  }
+
+  /** Night event chip ("FIESTA: x2 Tropa  2:31"). null hides it. */
+  setEvent(text: string | null, kind = ''): void {
+    this.eventEl.classList.toggle('hidden', text === null);
+    if (text === null) return;
+    this.set('event', this.eventEl, text);
+    if (this.cache.get('eventKind') !== kind) {
+      this.cache.set('eventKind', kind);
+      this.eventEl.className = `event-chip ${kind}`;
+    }
   }
 
   setObjective(text: string): void {

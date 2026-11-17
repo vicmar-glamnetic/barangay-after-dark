@@ -3,7 +3,12 @@ import type { SaveStore } from '../core/save';
 import {
   SLIPPERS, dailyChallenge, dailyReward, nextRank, nextStarGap, rankFor, rankIndex, starText, starsFor, today, yesterday,
 } from '../core/progression';
+import {
+  QUEST_TROPA, RIVALS, RIVAL_MAX, advanceQuests, checkBadges, dailyQuests, eventMult, nameTagSub, pushRecord, rivalReward, rivalTarget, rollQuests,
+  type Badge, type Finish, type NightEvent, type Quest,
+} from '../core/meta';
 import { Session } from '../net/session';
+import { submitScore } from '../net/leaderboard';
 import type { Menus } from '../ui/menus';
 import { NpcGroup } from '../world/npcs';
 import type { BaseGame } from './baseGame';
@@ -23,7 +28,21 @@ const INTERACT_RADIUS = 2.7;
 export interface ManagerHooks {
   /** A blocking menu opened/closed (release / re-grab pointer lock, hide touch HUD). */
   onModal: (open: boolean) => void;
+  /** The night event running right now (core/meta), or null. */
+  event: () => NightEvent | null;
+  /** Badges earned (show a toast + sound). */
+  onBadges: (b: Badge[]) => void;
 }
+
+/** Torneo: 3 games in a row in a lobby, standings by placement. */
+interface Tour {
+  id: string;
+  list: string[];
+  i: number;
+  totals: Map<string, number>;
+}
+const TOUR_PTS = [5, 3, 2, 1, 0, 0];
+const TAUNT_RADIUS = 6.5;
 
 /**
  * Owns the street games, their NPC groups in the hub, the interact system,
@@ -42,6 +61,10 @@ export class GameManager {
   private ctx: GameContext;
   /** Options for the next multiplayer run of each game (Taguan rotates the seeker). */
   private nextOpts = new Map<string, Record<string, unknown>>();
+  private tour: Tour | null = null;
+  /** Hub banter: which spot the player is near, and when each rival last spoke. */
+  private nearSpot: BaseGame | null = null;
+  private tauntAt = new Map<string, number>();
 
   constructor(base: Omit<GameContext, 'finish'>, private save: SaveStore, private menus: Menus, private hooks: ManagerHooks) {
     this.ctx = { ...base, finish: (r) => this.finish(r) };
@@ -77,9 +100,30 @@ export class GameManager {
       else {
         const best = this.save.data.best[g.id];
         const daily = this.daily().gameId === g.id && !this.dailyDoneToday() ? '  HAMON!' : '';
-        g.group.setLabel(g.name, best !== undefined ? `${starText(this.save.data.stars[g.id] ?? 0)}  Best ${best}${daily}` : `Laro tayo!${daily}`, g.layout.accent);
+        const rv = this.rivalText(g.id);
+        g.group.setLabel(g.name, (best !== undefined ? `${starText(this.save.data.stars[g.id] ?? 0)}  Best ${best}` : 'Laro tayo!') + daily + (rv ? `  ·  ${rv}` : ''), g.layout.accent);
       }
     });
+  }
+
+  /** "Karibal: Jun-jun 35" or '' once every level is beaten. */
+  rivalText(id: string): string {
+    const rv = RIVALS[id];
+    const lvl = this.save.data.rivals[id] ?? 0;
+    if (!rv) return '';
+    if (lvl >= RIVAL_MAX) return `${rv.name}: talo na!`;
+    return `Karibal: ${rv.name} ${rivalTarget(id, lvl)}`;
+  }
+
+  quests(): Quest[] {
+    const names: Record<string, string> = {};
+    for (const g of this.games) names[g.id] = g.name;
+    return dailyQuests(this.games.filter((g) => g.implemented).map((g) => g.id), names);
+  }
+
+  /** Name/title line other players see on my name tag. */
+  get myTag(): string {
+    return nameTagSub(this.save.data);
   }
 
   daily(): { gameId: string; target: number } {
@@ -132,6 +176,7 @@ export class GameManager {
         best = g;
       }
     }
+    this.hubBanter(player.position, controlsActive);
     if (!best || !controlsActive) {
       hud.setPrompt(null);
       touch.setInteractReady(false);
@@ -148,6 +193,25 @@ export class GameManager {
         this.ctx.audio.play('ui');
       } else this.openSpotMenu(best);
     }
+  }
+
+  /** A rival taunts you when you walk up to their game (at most every 40 s each). */
+  private hubBanter(p: THREE.Vector3, active: boolean): void {
+    let near: BaseGame | null = null;
+    for (const g of this.games) {
+      if (!g.implemented) continue;
+      if (Math.hypot(g.layout.spot.x - p.x, g.layout.spot.z - p.z) < TAUNT_RADIUS) near = g;
+    }
+    if (near === this.nearSpot) return;
+    this.nearSpot = near;
+    if (!near || !active) return;
+    const rv = RIVALS[near.id];
+    const lvl = this.save.data.rivals[near.id] ?? 0;
+    const now = performance.now();
+    if (!rv || lvl >= RIVAL_MAX || now - (this.tauntAt.get(near.id) ?? -1e9) < 40000) return;
+    this.tauntAt.set(near.id, now);
+    const line = rv.taunts[Math.floor(Math.random() * rv.taunts.length)];
+    this.ctx.hud.toast(`${rv.name}: "${line}"`, 'small', 2400);
   }
 
   postPhysics(dt: number): void {
@@ -187,7 +251,7 @@ export class GameManager {
     }
     this.menus.showBusy('Gumagawa ng lobby...');
     try {
-      const s = await Session.host(g.id, this.menus.playerName, this.menus.playerFace);
+      const s = await Session.host(g.id, this.menus.playerName, this.menus.playerFace, this.myTag);
       this.attachSession(s);
       this.showLobby();
     } catch (e) {
@@ -200,7 +264,7 @@ export class GameManager {
     this.menus.showJoin(
       async (code) => {
         try {
-          const s = await Session.join(code, this.menus.playerName, this.menus.playerFace);
+          const s = await Session.join(code, this.menus.playerName, this.menus.playerFace, this.myTag);
           this.attachSession(s);
           this.showLobby();
           return null;
@@ -218,8 +282,10 @@ export class GameManager {
     this.hooks.onModal(true);
     this.menus.showLobby(s, (id) => this.gameById(id)?.name ?? id, {
       onStart: () => {
+        this.tour = null;
         s.startGame(this.nextOpts.get(s.gameId) ?? {});
       },
+      onTour: () => this.startTour(),
       onLeave: () => this.leaveLobby(),
       onClose: () => {
         this.closeMenu();
@@ -239,6 +305,27 @@ export class GameManager {
     this.ctx.hud.setObjective(this.hubObjective());
   }
 
+  /** Host: start a Torneo of 3 different random games. */
+  private startTour(): void {
+    const s = this.session;
+    if (!s?.isHost) return;
+    const pool = this.games.filter((g) => g.implemented).map((g) => g.id);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const list = pool.slice(0, 3);
+    this.tourStep({ id: Math.random().toString(36).slice(2, 8), list, i: 0 });
+  }
+
+  private tourStep(t: { id: string; list: string[]; i: number }): void {
+    const s = this.session;
+    if (!s?.isHost) return;
+    const gid = t.list[t.i];
+    s.setGame(gid);
+    s.startGame({ ...(this.nextOpts.get(gid) ?? {}), tour: t });
+  }
+
   leaveLobby(): void {
     this.session?.leave();
   }
@@ -247,6 +334,7 @@ export class GameManager {
     if (this.session !== s) return;
     if (this.active?.net === s) this.quit();
     this.session = null;
+    this.tour = null;
     if (['lobby', 'end'].includes(this.menus.kind)) this.closeMenu();
     this.ctx.avatars.clear();
     if (reason) this.ctx.hud.toast(reason, 'bad', 2200);
@@ -271,6 +359,11 @@ export class GameManager {
     g.net = this.session;
     g.seed = seed;
     g.opts = opts;
+    const t = opts.tour as { id: string; list: string[]; i: number } | undefined;
+    if (t && Array.isArray(t.list)) {
+      if (this.tour?.id !== t.id) this.tour = { id: t.id, list: t.list, i: t.i, totals: new Map() };
+      else this.tour.i = t.i;
+    } else this.tour = null;
     this.start(g);
   }
 
@@ -292,6 +385,16 @@ export class GameManager {
     const data = this.save.data;
     const rankBefore = rankIndex(data.tropaPoints);
     const prevBest = data.best[g.id];
+    rollQuests(data);
+    // night event bonus
+    const ev = this.hooks.event();
+    const mult = eventMult(ev, g.id);
+    let eventMsg: string | undefined;
+    if (mult !== 1 && r.points > 0) {
+      const extra = Math.round(r.points * (mult - 1));
+      r.points += extra;
+      eventMsg = `${ev!.name}: +${extra} Tropa (x${mult})`;
+    }
     // stars
     const stars = starsFor(g.id, r.score);
     const prevStars = data.stars[g.id] ?? 0;
@@ -306,14 +409,67 @@ export class GameManager {
       r.points += bonus;
       dailyMsg = `Hamon ng Araw, tapos! +${bonus} Tropa  ·  ${data.streak} araw sunod-sunod`;
     }
+    // rival (solo or multiplayer, your own score counts)
+    let rivalMsg: string | undefined;
+    let rivalBeaten = false;
+    const rv = RIVALS[g.id];
+    const lvl = data.rivals[g.id] ?? 0;
+    if (rv && lvl < RIVAL_MAX) {
+      const target = rivalTarget(g.id, lvl);
+      if (r.score >= target) {
+        rivalBeaten = true;
+        const pay = rivalReward(lvl);
+        data.rivals[g.id] = lvl + 1;
+        data.barya += pay;
+        rivalMsg = lvl + 1 >= RIVAL_MAX
+          ? `Talo mo na si ${rv.name} sa lahat ng level! "${rv.lose}" +${pay} Barya`
+          : `Talo mo si ${rv.name} (${target})! "${rv.lose}" +${pay} Barya  ·  Susunod: ${rivalTarget(g.id, lvl + 1)}`;
+      } else rivalMsg = `${rv.name}: "${rv.win}" Kailangan mo ng ${target}.`;
+    }
+    // torneo standings (every client computes the same totals from the host's rows)
+    let tourLines: string[] | undefined;
+    let tourWon = false;
+    let tourNext: string | null = null;
+    const t = this.tour;
+    if (t && g.net && g.lastRows.length) {
+      const sorted = [...g.lastRows].sort((a, b) => b.score - a.score);
+      sorted.forEach((row) => {
+        // ties share the better placement
+        const place = sorted.findIndex((x) => x.score === row.score);
+        t.totals.set(row.id, (t.totals.get(row.id) ?? 0) + (TOUR_PTS[place] ?? 0));
+      });
+      const table = [...t.totals].sort((a, b) => b[1] - a[1]);
+      const last = t.i >= t.list.length - 1;
+      tourLines = [
+        last ? 'TORNEO: Huling resulta' : `TORNEO: Laro ${t.i + 1} sa ${t.list.length}`,
+        ...table.map(([id, pts], i) => `${i + 1}. ${id === g.net!.selfId ? 'Ikaw' : g.net!.nameOf(id)}  ${pts} pts`),
+      ];
+      if (last) {
+        tourWon = table[0]?.[0] === g.net.selfId && (table[1]?.[1] ?? -1) < table[0][1];
+        if (tourWon) tourLines.push('Ikaw ang KAMPEON ng Torneo!');
+      } else tourNext = t.list[t.i + 1];
+    }
+    // records, quests, points
+    const recordRank = pushRecord(data, g.id, r.score);
+    const fin: Finish = {
+      gameId: g.id, score: r.score, won: r.won, stars, multiplayer: !!g.net, feats: r.feats ?? [],
+      event: ev?.id ?? null, tourWon, rivalBeaten, rivalLevel: lvl,
+    };
+    const q = advanceQuests(data, this.quests(), fin, r.points);
+    if (q.done.length) r.points += QUEST_TROPA * q.done.length;
+    const questMsgs = q.done.map((x) => `Gawain tapos: ${x.text}`);
+    if (q.bonus) questMsgs.push('Lahat ng gawain ngayon, tapos! Bonus Barya!');
+    data.barya += Math.round(r.points);
     this.save.addPoints(r.points);
     const isBest = this.save.recordScore(g.id, r.score);
+    const badges = checkBadges(data, fin);
     // rank up (and tsinelas unlocks that come with it)
     const rankAfter = rankIndex(data.tropaPoints);
     let rankMsg: string | undefined;
     if (rankAfter > rankBefore) {
       const sl = SLIPPERS.find((x) => x.rank === rankAfter);
       rankMsg = `Bagong ranggo: ${rankFor(data.tropaPoints).name}!${sl ? `  Bagong tsinelas: ${sl.name}` : ''}`;
+      this.session?.setSub(this.myTag);
     }
     // near-miss nudge: the closest goal you just missed
     let nudge: string | undefined;
@@ -329,9 +485,20 @@ export class GameManager {
     this.ctx.hud.setPoints(data.tropaPoints);
     this.ctx.hud.setRank(this.progressText());
     if (rankMsg) window.setTimeout(() => this.ctx.audio.play('win'), 1500);
-    const unlocked: string | undefined = undefined;
-    const prog = { stars, newStars: stars > prevStars, dailyMsg, rankMsg, nudge };
+    if (badges.length) window.setTimeout(() => this.ctx.audio.play('badge'), 1900);
+    const prog = {
+      stars, newStars: stars > prevStars, dailyMsg, rankMsg, nudge, eventMsg, rivalMsg, questMsgs, tourLines,
+      badges: badges.map((b) => `${b.name} (+${b.barya} Barya)`), prevBest, recordRank,
+      barya: data.barya, rank: rankFor(data.tropaPoints).name,
+    };
     this.ctx.audio.play(r.won ? 'win' : 'lose');
+    // online leaderboard: send in the background, celebrate a top-20 spot
+    if (data.settings.onlineScores && r.score > 0) {
+      submitScore(g.id, r.score, this.menus.playerName).then((res) => {
+        if (!res?.week || res.week > 20 || this.active !== g) return;
+        window.setTimeout(() => this.ctx.hud.toast(`Pang-#${res.week} ka ngayong linggo sa ${g.name}!`, 'good', 2600), 1800);
+      });
+    }
     const s = g.net;
     if (s) this.nextOpts.set(g.id, g.nextOpts());
     if (s?.isHost) s.gameOver();
@@ -339,13 +506,27 @@ export class GameManager {
     window.setTimeout(() => {
       if (this.active !== g) return;
       this.hooks.onModal(true);
-      const extra = { best: this.save.data.best[g.id] ?? r.score, isBest, unlocked, ...prog };
+      const extra = { best: this.save.data.best[g.id] ?? r.score, isBest, ...prog };
       if (!s) {
         this.menus.showEnd(r, extra, { onRetry: () => this.retry(), onBack: () => this.quitFromCard(), backLabel: 'Balik sa barangay' });
       } else {
+        const tt = this.tour;
+        const nextName = tourNext ? this.gameById(tourNext)?.name ?? tourNext : '';
+        let onRetry: (() => void) | null = null;
+        let retryLabel: string | undefined;
+        if (s.isHost) {
+          if (tt && tourNext) {
+            onRetry = () => this.tourStep({ id: tt.id, list: tt.list, i: tt.i + 1 });
+            retryLabel = `Susunod: ${nextName} (${tt.i + 2}/${tt.list.length})`;
+          } else if (tt) {
+            onRetry = () => this.startTour();
+            retryLabel = 'Bagong Torneo';
+          } else onRetry = () => s.startGame(g.nextOpts());
+        }
         this.menus.showEnd(r, extra, {
-          onRetry: s.isHost ? () => s.startGame(g.nextOpts()) : null,
-          retryNote: s.isHost ? '' : 'Hintayin ang host para sa susunod na laro.',
+          onRetry,
+          retryLabel,
+          retryNote: s.isHost ? '' : tourNext ? `Susunod sa Torneo: ${nextName}. Hintayin ang host.` : 'Hintayin ang host para sa susunod na laro.',
           onBack: () => {
             this.quitFromCard();
             this.showLobby();
@@ -354,6 +535,22 @@ export class GameManager {
         });
       }
     }, 1100);
+  }
+
+  /** The sorbetero: walk up to the cart during the event for a treat. */
+  catchSorbetes(slot: number): void {
+    const data = this.save.data;
+    data.sorbetes++;
+    data.sorbetesSlot = slot;
+    data.barya += 15;
+    this.save.addPoints(20);
+    const badges = checkBadges(data, null);
+    this.save.persist();
+    this.ctx.hud.setPoints(data.tropaPoints);
+    this.ctx.hud.setRank(this.progressText());
+    this.ctx.hud.toast('Sorbetes! +20 Tropa, +15 Barya', 'good', 2000);
+    this.ctx.audio.play('pickup');
+    if (badges.length) this.hooks.onBadges(badges);
   }
 
   private retry(): void {

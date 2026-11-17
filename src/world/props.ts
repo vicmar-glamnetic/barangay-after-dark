@@ -431,3 +431,70 @@ export function parolGeometry(r = 0.45): THREE.BufferGeometry {
   g.translate(0, 0, -0.04);
   return g;
 }
+
+// ---------------------------------------------------------------- Taguan hiding props
+
+/** Stack of three wooden crates (about 1.6 m tall). */
+export function crateStack(b: B, f: Frame): void {
+  const { kit } = b;
+  const crate = (x: number, y: number, z: number, s: number, ry = 0) => {
+    kit.box(f, x, y, z, s, 0.8, s, C.wood, { collide: true, noise: 0.3, ry });
+    kit.box(f, x, y + 0.36, z, s + 0.02, 0.06, s + 0.02, C.darkWood, { ry });
+  };
+  crate(0, 0, 0, 1);
+  crate(1.05, 0, 0.1, 0.95, 0.15);
+  crate(0.45, 0.8, 0.05, 0.9, -0.1);
+}
+
+/** Cluster of plastic water drums. */
+export function drums(b: B, f: Frame): void {
+  const cols = [0x2a6f97, 0x6a994e, 0xd9822b];
+  [[0, 0], [0.68, 0.1], [0.3, 0.62]].forEach(([x, z], i) => {
+    b.kit.cyl(f, x, 0, z, 0.32, 0.32, 0.9, cols[i % cols.length], { collide: true, seg: 10 });
+    b.kit.cyl(f, x, 0.9, z, 0.2, 0.2, 0.04, shade(cols[i % cols.length], 0.6), { seg: 8 });
+  });
+}
+
+/** Big round shrub; solid core so you crouch behind it, not inside it. */
+export function bush(b: B, x: number, z: number, s = 1): void {
+  const f: Frame = { x, z, rot: x * 1.3 + z };
+  for (let i = 0; i < 6; i++) {
+    const a = i * 1.05;
+    const r = (0.5 + (i % 3) * 0.12) * s;
+    b.kit.geo(f, new THREE.IcosahedronGeometry(r, 0), i % 2 ? C.leaves2 : C.leaves, Math.cos(a) * 0.45 * s, (0.45 + (i % 2) * 0.35) * s, Math.sin(a) * 0.4 * s, { noise: 0.45 });
+  }
+  b.kit.phys.addCylinder(x, 0.6 * s, z, 0.6 * s, 0.75 * s);
+}
+
+/** Wooden kariton (push cart) loaded with sacks. Long axis along local X. */
+export function kariton(b: B, f: Frame): void {
+  const { kit } = b;
+  kit.box(f, 0, 0.45, 0, 1.7, 0.08, 1.0, C.wood, { collide: true, noise: 0.3 });
+  for (const z of [-0.48, 0.48]) kit.box(f, 0, 0.53, z, 1.7, 0.35, 0.06, C.darkWood);
+  for (const z of [-0.58, 0.58]) kit.geo(f, new THREE.CylinderGeometry(0.42, 0.42, 0.07, 12), C.darkWood, 0.1, 0.42, z, { rx: Math.PI / 2 });
+  for (const z of [-0.35, 0.35]) kit.box(f, -1.25, 0.6, z, 0.9, 0.05, 0.05, C.darkWood, { rz: -0.25 });
+  kit.box(f, 0.85, 0, 0, 0.06, 0.45, 0.06, C.darkWood);
+  [[-0.4, -0.2], [0.35, 0.15], [-0.05, 0.05]].forEach(([x, z], i) =>
+    kit.box(f, x, 0.53 + (i === 2 ? 0.38 : 0), z, 0.65, 0.4, 0.5, 0xd8c7a0, { noise: 0.35, ry: i * 0.4 }),
+  );
+  kit.phys.addBoxMatrix(kit.matrix(f, 0, 0.55, 0), 0.9, 0.55, 0.55);
+}
+
+/** Clay banga jars. */
+export function bangaJars(b: B, f: Frame): void {
+  [[0, 0, 1], [0.7, 0.25, 0.8], [0.25, 0.75, 0.68]].forEach(([x, z, s]) => {
+    b.kit.geo(f, new THREE.SphereGeometry(0.42 * s, 10, 8).scale(1, 1.15, 1), 0x9c4a2a, x, 0.46 * s, z, { noise: 0.25 });
+    b.kit.cyl(f, x, 0.88 * s, z, 0.22 * s, 0.18 * s, 0.14 * s, 0x84391f, { seg: 10 });
+    const p = local(f, x, 0, z);
+    b.kit.phys.addCylinder(p.x, 0.5 * s, p.z, 0.5 * s, 0.4 * s);
+  });
+}
+
+/** Stacked hollow blocks with a plank leaning on them. */
+export function hollowBlocks(b: B, f: Frame): void {
+  const { kit } = b;
+  kit.box(f, 0, 0, 0, 1.6, 0.6, 0.8, C.block, { collide: true, noise: 0.35 });
+  kit.box(f, 0.1, 0.6, 0, 1.2, 0.4, 0.8, shade(C.block, 0.92), { collide: true, noise: 0.35 });
+  kit.box(f, -0.5, 1.0, 0.05, 0.4, 0.2, 0.4, C.block, { noise: 0.3 });
+  kit.box(f, 0.3, 0.55, 0.5, 2.0, 0.05, 0.25, C.wood, { rz: 0.45 });
+}

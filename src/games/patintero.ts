@@ -20,16 +20,20 @@ import type { HubLayout } from './types';
  * judges every runner from their reported position. Clients just run.
  */
 
-export const GRID = { minX: 5, maxX: 15, minZ: 13.2, maxZ: 18.8, midZ: 16 };
-const LINES_X = [5, 7.5, 10, 12.5, 15];
-const START_X = 3.5;
-const FAR_X = 16.5;
+// Grid is 12 x 7.6 m, centered on the covered court (court floor x 2..18, z 11..21).
+// Keep in sync with the chalk grid painted in courtTexture().
+export const GRID = { minX: 4, maxX: 16, minZ: 12.2, maxZ: 19.8, midZ: 16 };
+const LINES_X = [4, 7, 10, 13, 16];
+const START_X = 2.6;
+const FAR_X = 17.4;
+/** Tagger speed multiplier (0.9 = 10% slower than the original tuning). */
+const EASE = 0.9;
 const FLOOR_Y = 0.1;
 const LIVES = 3;
 const TIME = 90;
 const TAG_REACH = 0.7;
 const LINE_HIT = 0.5;
-const SLOT_Z = [17.4, 14.6, 18.4, 13.6, 16.9, 15.1];
+const SLOT_Z = [17.6, 14.4, 18.9, 13.1, 17.0, 15.0];
 const SNAP_HZ = 15;
 
 type RState = 'ready' | 'run' | 'tagged' | 'won' | 'out';
@@ -125,7 +129,7 @@ export class Patintero extends BaseGame {
     const kids = [...this.group.kids, ...this.extras];
     this.taggers = kids.map((kid, i) => {
       const line = i < LINES_X.length ? i : -1;
-      const pos = line >= 0 ? GRID.midZ + Math.sin(i * 1.7) * 1.5 : 10;
+      const pos = line >= 0 ? GRID.midZ + Math.sin(i * 1.7) * 2 : 10;
       return { kid, line, pos, aim: pos, seed: i * 1.7, target: pos };
     });
     this.placeTaggers();
@@ -392,9 +396,9 @@ export class Patintero extends BaseGame {
             prey = r;
           }
         }
-        target = prey ? prey.last.z + prey.vel.z * 0.25 : GRID.midZ + Math.sin(t * 0.8 + tg.seed) * 1.8;
+        target = prey ? prey.last.z + prey.vel.z * 0.25 : GRID.midZ + Math.sin(t * 0.8 + tg.seed) * 2.4;
         tg.aim += (target - tg.aim) * Math.min(1, dt * 2.6);
-        speed = (prey ? 2.8 : 1.6) * this.speedUp;
+        speed = (prey ? 2.8 : 1.6) * this.speedUp * EASE;
         tg.pos = THREE.MathUtils.clamp(moveToward(tg.pos, tg.aim, speed * dt), GRID.minZ + 0.2, GRID.maxZ - 0.2);
       } else {
         let prey: Runner | null = null;
@@ -406,9 +410,9 @@ export class Patintero extends BaseGame {
             prey = r;
           }
         }
-        target = prey ? prey.last.x + prey.vel.x * 0.2 : 10 + Math.sin(t * 0.6) * 3.5;
+        target = prey ? prey.last.x + prey.vel.x * 0.2 : 10 + Math.sin(t * 0.6) * 4.2;
         tg.aim += (target - tg.aim) * Math.min(1, dt * 1.8);
-        speed = (prey ? 2.2 : 1.4) * this.speedUp;
+        speed = (prey ? 2.2 : 1.4) * this.speedUp * EASE;
         tg.pos = THREE.MathUtils.clamp(moveToward(tg.pos, tg.aim, speed * dt), GRID.minX, GRID.maxX);
       }
       tg.kid.speed = Math.abs(tg.aim - tg.pos) > 0.05 ? speed : 0;
@@ -448,6 +452,7 @@ export class Patintero extends BaseGame {
       shareText: mine.won
         ? `Nakatawid ako pabalik sa Patintero, ${mine.score} puntos sa Hari ng Kanto!`
         : `Naka-${crossed} linya ako sa Patintero sa Hari ng Kanto!`,
+      feats: mine.won && mine.lines.includes(`Buhay na natira: ${LIVES}/${LIVES}`) ? ['flawless'] : [],
     });
   }
 }

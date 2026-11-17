@@ -46,6 +46,7 @@ export const RANKS: Rank[] = [
   { at: 1500, name: 'Idol ng Barangay' },
   { at: 3000, name: 'Alamat ng Kanto' },
   { at: 6000, name: 'Barangay Legend' },
+  { at: 10000, name: 'Hari ng Kanto' },
 ];
 
 export function rankIndex(points: number): number {
@@ -71,6 +72,7 @@ export const SLIPPERS: { name: string; strap: number; top: number; rank: number 
   { name: 'Lila', strap: 0x7b2cbf, top: 0xc77dff, rank: 4 },
   { name: 'Ginto', strap: 0xb8860b, top: 0xffd700, rank: 5 },
   { name: 'Bahaghari', strap: 0xff4d6d, top: 0x4cc9f0, rank: 6 },
+  { name: 'Korona', strap: 0x6a0dad, top: 0xffd700, rank: 7 },
 ];
 
 /** Local calendar day, e.g. "2026-11-17". */

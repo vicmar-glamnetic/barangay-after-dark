@@ -14,6 +14,8 @@ const ua = navigator.userAgent;
 const isIOS =
   /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/i.test(ua);
+/** Facebook, Messenger, Instagram, TikTok, etc. in-app browsers (no fullscreen, weak WebGL/WebRTC). */
+const inApp = /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Messenger|Instagram|Line\/|MicroMessenger|TikTok|musical_ly|Bytedance|Twitter|Snapchat/i.test(ua);
 const coarse = mq('(pointer: coarse)');
 const fine = mq('(pointer: fine)');
 
@@ -23,6 +25,8 @@ const qFlag = params.get('q');
 export const device = {
   isIOS,
   isAndroid,
+  inApp,
+  inAppName: /Instagram/i.test(ua) ? 'Instagram' : /Messenger/i.test(ua) ? 'Messenger' : /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua) ? 'Facebook' : /TikTok|musical_ly|Bytedance/i.test(ua) ? 'TikTok' : 'app na ito',
   /** Phones and tablets: used for performance caps (DPR, antialias). */
   isMobile: isIOS || isAndroid || (coarse && !fine),
   /** Which HUD to show first. Switches live when the other input type is used. */

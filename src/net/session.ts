@@ -21,14 +21,17 @@ export interface PlayerInfo {
   color: number;
   /** Optional custom face (small JPEG data URL, see net/face.ts). */
   face?: string;
+  /** Rank or title shown under the name tag. */
+  sub?: string;
 }
 
 /** [x, y, z, yaw, anim] where anim: 0 idle, 1 run, 2 cheer, 3 crouch */
 export type Pose = [number, number, number, number, number];
 
 type Msg =
-  | { t: 'hello'; name: string; face?: string | null }
+  | { t: 'hello'; name: string; face?: string | null; sub?: string }
   | { t: 'face'; face: string | null }
+  | { t: 'sub'; sub: string }
   | { t: 'roster'; players: PlayerInfo[]; game: string; host: string }
   | { t: 'pose'; p: Pose }
   | { t: 'poses'; p: Record<string, Pose> }
@@ -104,7 +107,7 @@ export class Session {
   // ------------------------------------------------------------------ create / join
 
   /** Create a lobby for `gameId`. Retries with new codes if one is taken. */
-  static async host(gameId: string, name: string, face: string | null = null): Promise<Session> {
+  static async host(gameId: string, name: string, face: string | null = null, sub = ''): Promise<Session> {
     let lastErr: unknown;
     for (let attempt = 0; attempt < 4; attempt++) {
       const code = makeCode();
@@ -113,7 +116,7 @@ export class Session {
         const s = new Session(peer, true, code, gameId, name);
         s.selfId = peer.id;
         s.hostId = peer.id;
-        s.players = [{ id: peer.id, name, color: COLORS[0], ...(isValidFace(face) ? { face } : {}) }];
+        s.players = [{ id: peer.id, name, color: COLORS[0], sub: cleanSub(sub), ...(isValidFace(face) ? { face } : {}) }];
         peer.on('connection', (c) => s.acceptClient(c));
         peer.on('disconnected', () => peer.reconnect());
         return s;
@@ -126,7 +129,7 @@ export class Session {
   }
 
   /** Join an existing lobby by code. Resolves once the roster arrives. */
-  static async join(rawCode: string, name: string, face: string | null = null): Promise<Session> {
+  static async join(rawCode: string, name: string, face: string | null = null, sub = ''): Promise<Session> {
     const code = cleanCode(rawCode);
     if (code.length !== 4) throw new Error('Apat na letra ang code.');
     let peer: Peer;
@@ -151,7 +154,7 @@ export class Session {
       });
       conn.on('open', () => {
         s.conns.set(s.hostId, conn);
-        conn.send({ t: 'hello', name, face: isValidFace(face) ? face : null } satisfies Msg);
+        conn.send({ t: 'hello', name, face: isValidFace(face) ? face : null, sub: cleanSub(sub) } satisfies Msg);
       });
       conn.on('data', (raw) => {
         const m = raw as Msg;
@@ -191,7 +194,7 @@ export class Session {
           if (this.players.some((p) => p.id === c.peer)) return;
           const used = new Set(this.players.map((p) => p.color));
           const color = COLORS.find((x) => !used.has(x)) ?? COLORS[this.players.length % COLORS.length];
-          this.players.push({ id: c.peer, name: sanitizeName(m.name), color, ...(isValidFace(m.face) ? { face: m.face } : {}) });
+          this.players.push({ id: c.peer, name: sanitizeName(m.name), color, sub: cleanSub(m.sub), ...(isValidFace(m.face) ? { face: m.face } : {}) });
           this.sendRoster();
           break;
         }
@@ -200,6 +203,13 @@ export class Session {
           if (!p) return;
           if (isValidFace(m.face)) p.face = m.face;
           else delete p.face;
+          this.sendRoster();
+          break;
+        }
+        case 'sub': {
+          const p = this.players.find((x) => x.id === c.peer);
+          if (!p) return;
+          p.sub = cleanSub(m.sub);
           this.sendRoster();
           break;
         }
@@ -251,7 +261,10 @@ export class Session {
   private handleFromHost(m: Msg): void {
     switch (m.t) {
       case 'roster':
-        this.players = m.players.map((p) => (isValidFace(p.face) ? p : { id: p.id, name: p.name, color: p.color }));
+        this.players = m.players.map((p) => {
+          const base = { id: p.id, name: p.name, color: p.color, sub: cleanSub(p.sub) };
+          return isValidFace(p.face) ? { ...base, face: p.face } : base;
+        });
         this.gameId = m.game;
         this.hostId = m.host;
         for (const id of [...this.poses.keys()]) if (!m.players.some((p) => p.id === id)) this.poses.delete(id);
@@ -330,6 +343,19 @@ export class Session {
     }
   }
 
+  /** Change my rank/title line for everyone in the lobby. */
+  setSub(sub: string): void {
+    const v = cleanSub(sub);
+    if (this.isHost) {
+      const me = this.players.find((p) => p.id === this.selfId);
+      if (!me || me.sub === v) return;
+      me.sub = v;
+      this.sendRoster();
+    } else {
+      this.conns.get(this.hostId)?.send({ t: 'sub', sub: v } satisfies Msg);
+    }
+  }
+
   nameOf(id: string): string {
     return this.players.find((p) => p.id === id)?.name ?? 'Tropa';
   }
@@ -377,6 +403,10 @@ function toRemote(p: Pose): RemotePose {
 }
 
 const round = (v: number) => Math.round(v * 100) / 100;
+
+function cleanSub(raw: unknown): string {
+  return String(raw ?? '').replace(/[^\p{L}\p{N} ._'-]/gu, '').trim().slice(0, 22);
+}
 
 export function sanitizeName(raw: string): string {
   const s = String(raw ?? '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 14);

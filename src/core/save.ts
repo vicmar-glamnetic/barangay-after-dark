@@ -19,6 +19,8 @@ export interface Settings {
   showFps: boolean;
   /** Bloom glow (desktop High only). Off by default: it costs ~4-7 ms per frame. */
   glow: boolean;
+  /** Send scores to the online leaderboard (name + score only). */
+  onlineScores: boolean;
 }
 
 export interface SaveData {
@@ -35,7 +37,36 @@ export interface SaveData {
   streak: number;
   /** Chosen tsinelas color index (see core/progression SLIPPERS). */
   slipper: number;
+  /** Barya: shop wallet, separate from Tropa Points (spending never lowers your rank). */
+  barya: number;
+  /** Shop item ids bought (see core/meta SHOP). */
+  owned: string[];
+  /** Equipped name-tag title (shop item id) or ''. */
+  title: string;
+  /** Badge id -> day earned. */
+  badges: Record<string, string>;
+  /** Daily quest progress (see core/meta). */
+  quests: QuestState;
+  /** Rival level per game (0..5). */
+  rivals: Record<string, number>;
+  /** Top 5 scores per game with dates. */
+  history: Record<string, { s: number; d: string }[]>;
+  /** Times the sorbetero was caught, and the last event slot it was caught in. */
+  sorbetes: number;
+  sorbetesSlot: number;
   settings: Settings;
+}
+
+export interface QuestState {
+  date: string;
+  prog: number[];
+  done: boolean[];
+  /** Game ids played today. */
+  games: string[];
+  /** Tropa earned today. */
+  tropa: number;
+  /** All-three bonus already paid. */
+  bonus: boolean;
 }
 
 const KEY = 'barangay-after-dark:save:v1';
@@ -67,7 +98,16 @@ export class SaveStore {
       dailyDone: '',
       streak: 0,
       slipper: 0,
-      settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false },
+      barya: 0,
+      owned: [],
+      title: '',
+      badges: {},
+      quests: { date: '', prog: [0, 0, 0], done: [false, false, false], games: [], tropa: 0, bonus: false },
+      rivals: {},
+      history: {},
+      sorbetes: 0,
+      sorbetesSlot: -1,
+      settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false, onlineScores: true },
     };
   }
 
@@ -89,6 +129,35 @@ export class SaveStore {
     d.dailyDone = typeof raw.dailyDone === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dailyDone) ? raw.dailyDone : '';
     d.streak = Math.round(num(raw.streak, 0, 0, 9999));
     d.slipper = Math.round(num(raw.slipper, 0, 0, 99));
+    d.barya = Math.round(num(raw.barya, 0, 0, 1e9));
+    const strs = (o: unknown) => (Array.isArray(o) ? o.filter((x): x is string => typeof x === 'string').slice(0, 200) : []);
+    d.owned = strs(raw.owned);
+    d.title = typeof raw.title === 'string' ? raw.title : '';
+    if (raw.badges && typeof raw.badges === 'object')
+      for (const [k, v] of Object.entries(raw.badges)) if (typeof v === 'string') d.badges[k] = v;
+    const q = raw.quests as Partial<QuestState> | undefined;
+    if (q && typeof q === 'object' && typeof q.date === 'string') {
+      const nums = (a: unknown) => [0, 1, 2].map((i) => (Array.isArray(a) ? num(a[i], 0, 0, 1e9) : 0));
+      d.quests = {
+        date: q.date,
+        prog: nums(q.prog),
+        done: [0, 1, 2].map((i) => Array.isArray(q.done) && q.done[i] === true),
+        games: strs(q.games),
+        tropa: num(q.tropa, 0, 0, 1e9),
+        bonus: q.bonus === true,
+      };
+    }
+    d.rivals = Object.fromEntries(Object.entries(recs(raw.rivals)).map(([k, v]) => [k, Math.round(Math.min(5, Math.max(0, v)))]));
+    if (raw.history && typeof raw.history === 'object')
+      for (const [k, v] of Object.entries(raw.history)) {
+        if (!Array.isArray(v)) continue;
+        d.history[k] = v
+          .filter((x) => x && typeof x.s === 'number' && typeof x.d === 'string')
+          .slice(0, 5)
+          .map((x) => ({ s: x.s, d: x.d }));
+      }
+    d.sorbetes = Math.round(num(raw.sorbetes, 0, 0, 1e6));
+    d.sorbetesSlot = Math.round(num(raw.sorbetesSlot, -1, -1, 1e12));
     const s = raw.settings as Partial<Settings> | undefined;
     if (s) {
       d.settings.sensitivity = num(s.sensitivity, 1, 0.2, 3);
@@ -98,6 +167,7 @@ export class SaveStore {
       d.settings.autoFps = s.autoFps !== false;
       d.settings.showFps = s.showFps === true;
       d.settings.glow = s.glow === true;
+      d.settings.onlineScores = s.onlineScores !== false;
     }
     return d;
   }

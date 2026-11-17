@@ -210,7 +210,8 @@ export function courtTexture(): THREE.CanvasTexture {
     }
     g.stroke();
   };
-  const gx0 = s * 3, gx1 = W - s * 3, gy0 = s * 2.2, gy1 = H - s * 2.2;
+  // matches GRID in games/patintero.ts (12 x 7.6 m centered on the 16 x 10 m court)
+  const gx0 = s * 2, gx1 = W - s * 2, gy0 = s * 1.2, gy1 = H - s * 1.2;
   chalk(gx0, gy0, gx1, gy0);
   chalk(gx0, gy1, gx1, gy1);
   chalk(gx0, (gy0 + gy1) / 2, gx1, (gy0 + gy1) / 2);

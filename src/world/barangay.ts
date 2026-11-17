@@ -6,6 +6,7 @@ import type { Lighting } from './lighting';
 import {
   B, C, TexKit, arch, coconut, court, house, jeepney, langitArea, local, parolGeometry,
   pottedPlant, sampayan, sariSari, shade, tree, tricycle, waitingShed,
+  bangaJars, bush, crateStack, drums, hollowBlocks, kariton,
 } from './props';
 import { GlowField } from './glows';
 import { capizTexture, courtTexture, radialTexture, signTexture, storeWindowTexture } from './textures';
@@ -31,6 +32,8 @@ export interface World {
   lampHeads: THREE.Vector3[];
   triangles: number;
   update(dt: number, t: number): void;
+  /** Brownout: 1 = lights on, 0 = power out (world dims, lamp glows go dark). */
+  setPower(k: number): void;
 }
 
 const F0: Frame = { x: 0, z: 0, rot: 0 };
@@ -134,6 +137,17 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   kit.cyl({ x: -3.5, z: -15.6, rot: 0 }, 0, 0, 0, 0.32, 0.32, 0.9, 0x6a994e, { collide: true, seg: 10 });
   kit.box({ x: 1.5, z: -17.5, rot: 0.3 }, 0, 0, 0, 1.2, 1.0, 1.2, C.wood, { collide: true, noise: 0.3 });
   kit.box({ x: -1, z: -13.2, rot: 0 }, 0, 2.7, 0, 0.05, 0.25, 0.05, 0x333333);
+  // more Taguan cover (keep in sync with HIDING_SPOTS in games/taguan.ts)
+  crateStack(b, { x: -14.6, z: -20.8, rot: 0 });
+  crateStack(b, { x: -24, z: -16.2, rot: 0.3 });
+  tricycle(b, { x: -1.8, z: -22.4, rot: 0 }, 0x2f9e6a);
+  kariton(b, { x: 10.2, z: -22, rot: 0.2 });
+  bangaJars(b, { x: -9.4, z: -16.8, rot: 0.4 });
+  hollowBlocks(b, { x: -27.2, z: -19.5, rot: Math.PI / 2 });
+  drums(b, { x: 27, z: -25.5, rot: 0.6 });
+  bush(b, 24.8, -21, 1.2);
+  bush(b, 4, -27.2, 1.1);
+  bush(b, 27.8, -17.2, 1);
 
   // ---------------------------------------------------------------- road vehicles + landmarks
   jeepney(b, { x: -5.5, z: 1.9, rot: Math.PI / 2 }, 0xd2364a, 0xf2c230, 0x2f6fd6, T.jeepA);
@@ -154,6 +168,10 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   house(b, { x: -14, z: 26.5, rot: Math.PI }, { w: 6, d: 4.5, floors: 1, wall: 0xc2d3a0, roof: C.roofGalv });
   house(b, { x: 4, z: 26.5, rot: Math.PI }, { w: 6, d: 4.5, floors: 1, wall: 0xe8b4bc, roof: C.roofRed });
   langitArea(b, { x: 23.5, z: 11, rot: 0 });
+  // Taguan cover on the south side
+  bush(b, 18.8, 25, 1.2);
+  drums(b, { x: 8.4, z: 25.2, rot: -0.3 });
+  bangaJars(b, { x: -9.6, z: 26.4, rot: 1.1 });
 
   // ---------------------------------------------------------------- distant silhouettes past the fence
   for (let i = 0; i < 46; i++) {
@@ -267,7 +285,26 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   scene.add(vk);
   const vkColors = [0xff3df5, 0x3dd9ff, 0xffe53d, 0x5dff7a].map((h) => new THREE.Color(h));
 
+  // everything built so far: lit (baked) materials dim in a brownout, additive glows switch off
+  const dimMats: THREE.MeshBasicMaterial[] = [];
+  const glowObjs: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (!m || Array.isArray(m)) return;
+    if (m.blending === THREE.AdditiveBlending) glowObjs.push(o);
+    else if (m instanceof THREE.MeshBasicMaterial && !dimMats.includes(m)) dimMats.push(m);
+  });
+  const baseCols = dimMats.map((m) => m.color.clone());
+  let power = 1;
+
   return {
+    setPower(k: number) {
+      if (k === power) return;
+      power = k;
+      const f = 0.2 + 0.8 * k;
+      dimMats.forEach((m, i) => m.color.copy(baseCols[i]).multiplyScalar(f));
+      for (const o of glowObjs) o.visible = k > 0.5;
+    },
     spawn: { pos: new THREE.Vector3(-1.5, 0.2, 7.2), yaw: -0.25 },
     lampHeads,
     triangles: 0,
@@ -283,7 +320,7 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
         }
       }
       const i = Math.floor(t * 1.6) % vkColors.length;
-      vkMat.color.copy(vkColors[i]).lerp(vkColors[(i + 1) % vkColors.length], (t * 1.6) % 1);
+      vkMat.color.copy(vkColors[i]).lerp(vkColors[(i + 1) % vkColors.length], (t * 1.6) % 1).multiplyScalar(power > 0.5 ? 1 : 0.15);
       bulbMat.opacity = 0.85 + Math.sin(t * 2.3) * 0.1;
       for (let k = 0; k < parols.length; k++) parols[k].rotation.y = Math.sin(t * 0.8 + k) * 0.25;
     },

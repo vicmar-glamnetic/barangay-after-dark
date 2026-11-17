@@ -25,6 +25,9 @@ import type { HubLayout } from './types';
 export const HIDING_SPOTS: [number, number][] = [
   [-4.7, -16.3], [0.3, -18.0], [3.1, -15.1], [10.0, -12.0], [18.85, -11.5], [-11.85, -12.5], [-19.4, -11.5],
   [-13.5, -17.3], [-2.2, -6.9], [-6.5, 3.25], [17.5, -3.3], [-28.6, -10.5], [10.4, -15.8], [-25.9, 24.0],
+  // behind the extra cover props (crates, tricycle, kariton, banga, blocks, drums, bushes)
+  [-13.9, -21.9], [-23.9, -17.5], [-1.9, -24.3], [10.2, -23.4], [-9.6, -17.9], [-28.4, -19.5],
+  [27.4, -26.7], [25.8, -22.2], [4.6, -28.5], [28.7, -17.8], [18.3, 26.4], [9.5, 26.4], [-9.1, 27.9],
 ];
 
 const BASE = new THREE.Vector3(2.4, 0, -11.2); // counting wall (sari-sari side wall)
@@ -410,6 +413,7 @@ export class Taguan extends BaseGame {
         : won
           ? 'Hindi ako nahanap sa Taguan sa Hari ng Kanto!'
           : `Nakapagtago ako nang ${mine.score}s sa Taguan sa Hari ng Kanto!`,
+      feats: seeker ? (mine.won ? ['foundAll'] : []) : mine.lines.some((l) => l.startsWith('Hindi ka nakita')) ? ['unseen'] : [],
     });
   }
 }

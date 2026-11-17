@@ -17,6 +17,7 @@ interface Avatar {
   pos: THREE.Vector3;
   stepDist: number;
   face: string | undefined;
+  sub: string;
 }
 
 /**
@@ -66,13 +67,25 @@ export class Avatars {
       kid.root.visible = this.visible;
       this.scene.add(kid.root);
       kid.addShadow(this.blobs);
-      const tag = makeTag(p.name, p.color);
+      const tag = makeTag(p.name, p.color, p.sub ?? '');
       tag.visible = this.visible && this.tagsVisible;
       this.scene.add(tag);
       const rp = s.poses.get(p.id);
       const pos = new THREE.Vector3(rp?.x ?? 0, rp?.y ?? 0, rp?.z ?? 0);
       kid.root.position.copy(pos);
-      this.list.set(p.id, { kid, tag, name: p.name, pos, stepDist: 0, face: undefined });
+      this.list.set(p.id, { kid, tag, name: p.name, pos, stepDist: 0, face: undefined, sub: p.sub ?? '' });
+    }
+    // rank / title line changed: redraw the tag
+    for (const p of s.players) {
+      const a = this.list.get(p.id);
+      if (!a || a.sub === (p.sub ?? '')) continue;
+      a.sub = p.sub ?? '';
+      const vis = a.tag.visible;
+      (a.tag.material as THREE.SpriteMaterial).map?.dispose();
+      a.tag.removeFromParent();
+      a.tag = makeTag(p.name, p.color, a.sub);
+      a.tag.visible = vis;
+      this.scene.add(a.tag);
     }
     // custom faces (update when someone picks a new one)
     for (const p of s.players) {
@@ -121,10 +134,10 @@ export class Avatars {
   }
 }
 
-function makeTag(name: string, color: number): THREE.Sprite {
+function makeTag(name: string, color: number, sub: string): THREE.Sprite {
   const c = document.createElement('canvas');
   c.width = 256;
-  c.height = 64;
+  c.height = 96;
   const g = c.getContext('2d')!;
   g.font = `800 34px ${FONT}`;
   const w = Math.min(248, g.measureText(name).width + 34);
@@ -140,10 +153,20 @@ function makeTag(name: string, color: number): THREE.Sprite {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(name, 128 + 8, 33, w - 30);
+  if (sub) {
+    // rank / title in gold under the name
+    g.font = `800 24px ${FONT}`;
+    g.lineWidth = 5;
+    g.strokeStyle = 'rgba(12,16,38,0.85)';
+    g.strokeText(sub, 128, 76, 248);
+    g.fillStyle = '#ffd166';
+    g.fillText(sub, 128, 76, 248);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xdcdcdc, depthWrite: false, fog: false, transparent: true }));
-  s.scale.set(1.4, 0.35, 1);
+  s.scale.set(1.4, 0.525, 1);
+  s.center.set(0.5, 0.67);
   s.renderOrder = 6;
   return s;
 }

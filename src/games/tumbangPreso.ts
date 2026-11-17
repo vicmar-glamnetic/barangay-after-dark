@@ -14,7 +14,9 @@ import type { HubLayout } from './types';
  * A can stands in a chalk circle guarded by the taya. Everyone throws their
  * tsinelas from behind the line. If the can falls, the taya must fetch it and
  * set it back up. Run out, grab your slipper and get back behind the line.
- * While the can is standing, the taya tags anyone past the line.
+ * While the can is standing, the taya may tag anyone past the line who has
+ * already grabbed their slipper (on their way back). Someone still going for
+ * their slipper cannot be tagged.
  *
  * 3 rounds. Knockdown +10 (once per player per round), safe return +5,
  * return while the can is still down +5 bonus.
@@ -22,7 +24,8 @@ import type { HubLayout } from './types';
  * MULTIPLAYER (2+ players): one PLAYER is the taya instead of the AI kid.
  * The taya cannot cross the throw line. When the can falls they walk to it
  * (picks it up), carry it back into the circle (it stands up by itself), and
- * while the can stands they tag anyone past the line just by touching them.
+ * while the can stands they tag anyone past the line who already picked up
+ * their slipper, just by touching them.
  * Whoever gets tagged is the taya next round. Taya: +10 per tag, +2 per reset.
  *
  * Network: the host owns the can, every slipper and the taya (physics + AI)
@@ -348,7 +351,7 @@ export class TumbangPreso extends BaseGame {
           ? 'Natumba ang lata! Puntahan mo para kunin.'
           : this.canState === 2
             ? 'Ibalik ang lata sa bilog!'
-            : 'Ikaw ang TAYA! Habang nakatayo ang lata, tayain ang lumampas sa linya.',
+            : 'Ikaw ang TAYA! Habang nakatayo ang lata, tayain ang may hawak nang tsinelas.',
     };
     // the taya may not cross the throw line
     if (this.myPhase === 'taya' && player.position.x > LINE_X - 0.25) {
@@ -673,9 +676,9 @@ export class TumbangPreso extends BaseGame {
       }
       return;
     }
-    // can is standing: touch anyone past the line to tag them
+    // can is standing: touch anyone past the line who already grabbed their slipper
     for (const p of this.parts.values()) {
-      if (p.id === id || (p.phase !== 'out' && p.phase !== 'return')) continue;
+      if (p.id === id || p.phase !== 'return') continue;
       const pos = this.posOf(p.id);
       if (!pos || pos.x >= LINE_X) continue;
       if (Math.hypot(pos.x - tp.x, pos.z - tp.z) < 1.0) {
@@ -784,13 +787,13 @@ export class TumbangPreso extends BaseGame {
     }
   }
 
-  /** Nearest participant past the line who is out or returning. */
+  /** Nearest participant past the line who already grabbed their slipper. */
   private chaseTarget(): Part | null {
     const kp = this.taya.root.position;
     let best: Part | null = null;
     let bestD = Infinity;
     for (const p of this.parts.values()) {
-      if (p.phase !== 'out' && p.phase !== 'return') continue;
+      if (p.phase !== 'return') continue;
       const pos = this.posOf(p.id);
       if (!pos || pos.x >= LINE_X) continue;
       const d = Math.hypot(pos.x - kp.x, pos.z - kp.z);
@@ -946,6 +949,7 @@ export class TumbangPreso extends BaseGame {
       won,
       lines: [...mine.lines, ...ranking],
       shareText: `Naka-${knocks} tumba at ${mine.score} puntos ako sa Tumbang Preso sa Hari ng Kanto!`,
+      feats: mine.lines.includes('Hindi ka na-taya!') ? ['untouched'] : [],
     });
   }
 }

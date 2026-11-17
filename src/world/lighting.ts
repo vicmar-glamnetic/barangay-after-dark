@@ -28,6 +28,8 @@ export class Lighting {
   readonly moon: THREE.DirectionalLight;
   private pool: THREE.PointLight[] = [];
   private poolTimer = 0;
+  /** 1 = normal, lower = brownout (street lamps off, darker sky light). */
+  private power = 1;
 
   constructor(scene: THREE.Scene) {
     this.hemi = new THREE.HemisphereLight(0x8ea3e6, 0x3b2b22, 1.5);
@@ -79,6 +81,13 @@ export class Lighting {
     return out.setRGB(albedo.r * r * ao, albedo.g * g * ao, albedo.b * b * ao);
   }
 
+  /** Brownout: 0..1 multiplier on the lamp pool and the hemisphere light. */
+  setPower(k: number): void {
+    this.power = k;
+    this.hemi.intensity = 1.5 * (0.45 + 0.55 * k);
+    this.poolTimer = 0;
+  }
+
   /** Move the real point lights to the lamps nearest the player. */
   update(dt: number, focus: THREE.Vector3): void {
     this.poolTimer -= dt;
@@ -98,7 +107,7 @@ export class Lighting {
       p.position.copy(e.l.pos);
       p.color.copy(e.l.color);
       p.distance = e.l.range * 1.4;
-      p.intensity = e.l.intensity * 9;
+      p.intensity = e.l.intensity * 9 * this.power;
     }
   }
 }
