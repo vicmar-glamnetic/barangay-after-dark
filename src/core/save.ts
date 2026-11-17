@@ -54,6 +54,8 @@ export interface SaveData {
   /** Times the sorbetero was caught, and the last event slot it was caught in. */
   sorbetes: number;
   sorbetesSlot: number;
+  /** Games left with a treat's Tropa boost (core/meta TREAT_MULT). */
+  boost: number;
   settings: Settings;
 }
 
@@ -107,6 +109,7 @@ export class SaveStore {
       history: {},
       sorbetes: 0,
       sorbetesSlot: -1,
+      boost: 0,
       settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false, onlineScores: true },
     };
   }
@@ -158,6 +161,7 @@ export class SaveStore {
       }
     d.sorbetes = Math.round(num(raw.sorbetes, 0, 0, 1e6));
     d.sorbetesSlot = Math.round(num(raw.sorbetesSlot, -1, -1, 1e12));
+    d.boost = Math.round(num(raw.boost, 0, 0, 999));
     const s = raw.settings as Partial<Settings> | undefined;
     if (s) {
       d.settings.sensitivity = num(s.sensitivity, 1, 0.2, 3);

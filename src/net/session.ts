@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import Peer, { type DataConnection } from 'peerjs';
 import { isValidFace } from './face';
 
@@ -70,11 +71,11 @@ export function cleanCode(raw: string): string {
 
 function peerError(e: unknown): string {
   const type = (e as { type?: string })?.type ?? '';
-  if (type === 'peer-unavailable') return 'Walang lobby na may ganyang code.';
-  if (type === 'unavailable-id') return 'Gamit na ang code na yan. Subukan ulit.';
-  if (type === 'network' || type === 'server-error' || type === 'socket-error') return 'Walang koneksyon sa server. Check ang internet mo.';
-  if (type === 'browser-incompatible') return 'Hindi suportado ng browser na ito ang multiplayer.';
-  return 'Hindi makakonekta. Subukan ulit.';
+  if (type === 'peer-unavailable') return L('Walang lobby na may ganyang code.', 'No lobby with that code.');
+  if (type === 'unavailable-id') return L('Gamit na ang code na yan. Subukan ulit.', 'That code is taken. Try again.');
+  if (type === 'network' || type === 'server-error' || type === 'socket-error') return L('Walang koneksyon sa server. Check ang internet mo.', "Can't reach the server. Check your internet.");
+  if (type === 'browser-incompatible') return L('Hindi suportado ng browser na ito ang multiplayer.', "This browser doesn't support multiplayer.");
+  return L('Hindi makakonekta. Subukan ulit.', "Couldn't connect. Try again.");
 }
 
 export class Session {
@@ -131,7 +132,7 @@ export class Session {
   /** Join an existing lobby by code. Resolves once the roster arrives. */
   static async join(rawCode: string, name: string, face: string | null = null, sub = ''): Promise<Session> {
     const code = cleanCode(rawCode);
-    if (code.length !== 4) throw new Error('Apat na letra ang code.');
+    if (code.length !== 4) throw new Error(L('Apat na letra ang code.', 'The code has 4 letters.'));
     let peer: Peer;
     try {
       peer = await openPeer();
@@ -145,7 +146,7 @@ export class Session {
       const conn = peer.connect(s.hostId, { serialization: 'json', reliable: true });
       const timer = window.setTimeout(() => {
         peer.destroy();
-        reject(new Error('Walang sumagot. Tama ba ang code?'));
+        reject(new Error(L('Walang sumagot. Tama ba ang code?', 'No answer. Is the code right?')));
       }, 12000);
       peer.on('error', (e) => {
         clearTimeout(timer);
@@ -172,7 +173,7 @@ export class Session {
         }
         s.handleFromHost(m);
       });
-      conn.on('close', () => s.close('Umalis ang host. Tapos na ang lobby.'));
+      conn.on('close', () => s.close(L('Umalis ang host. Tapos na ang lobby.', 'The host left. The lobby is closed.')));
     });
   }
 
@@ -181,7 +182,7 @@ export class Session {
   private acceptClient(c: DataConnection): void {
     c.on('open', () => {
       if (this.players.length >= MAX_PLAYERS || this.inGame) {
-        c.send({ t: 'bye', reason: this.inGame ? 'May laro pang tumatakbo. Hintayin matapos.' : 'Puno na ang lobby.' } satisfies Msg);
+        c.send({ t: 'bye', reason: this.inGame ? L('May laro pang tumatakbo. Hintayin matapos.', 'A game is in progress. Wait for it to finish.') : L('Puno na ang lobby.', 'The lobby is full.') } satisfies Msg);
         setTimeout(() => c.close(), 300);
         return;
       }
@@ -367,7 +368,7 @@ export class Session {
   // ------------------------------------------------------------------ teardown
 
   leave(): void {
-    if (this.isHost) this.toClients({ t: 'bye', reason: 'Isinara ng host ang lobby.' });
+    if (this.isHost) this.toClients({ t: 'bye', reason: L('Isinara ng host ang lobby.', 'The host closed the lobby.') });
     this.close('');
   }
 

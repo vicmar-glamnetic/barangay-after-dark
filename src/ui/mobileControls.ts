@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import type { Button, Input } from '../core/input';
 import { el } from './dom';
 
@@ -16,8 +17,8 @@ export class MobileControls {
   private base = el('div.joy-base');
   private knob = el('div.joy-knob');
   private btnAction = el('div.tbtn.action.interactive', { text: 'Bato' });
-  private btnJump = el('div.tbtn.jump.interactive', { text: 'Talon' });
-  private btnInteract = el('div.tbtn.interact.interactive', { text: 'Laro!' });
+  private btnJump = el('div.tbtn.jump.interactive', { text: L('Talon', 'Jump') });
+  private btnInteract = el('div.tbtn.interact.interactive', { text: L('Laro!', 'Play!') });
 
   private joyId = -1;
   private joyCx = 0;
@@ -155,6 +156,12 @@ export class MobileControls {
   }
 
   /** Hide jump + joystick while a game locks movement (Sipa). */
+  /** Re-label the fixed buttons after a language change. */
+  relabel(): void {
+    this.btnJump.textContent = L('Talon', 'Jump');
+    this.btnInteract.textContent = L('Laro!', 'Play!');
+  }
+
   setJumpVisible(v: boolean): void {
     this.btnJump.classList.toggle('hidden', !v);
     this.movePad.classList.toggle('hidden', !v);

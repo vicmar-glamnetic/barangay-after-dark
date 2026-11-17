@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
@@ -30,7 +31,15 @@ export class LuksongBaka extends BaseGame {
   readonly id = 'luksongBaka';
   readonly name = 'Luksong Baka';
   readonly implemented = true;
-  readonly where = 'sa plaza, sa tabi ng poste';
+  get where() { return L('sa plaza, sa tabi ng poste', 'in the plaza by the lamp post'); }
+  get blurb() { return L('Lundagan ang "baka" na pataas nang pataas', 'Leapfrog over a kid who keeps standing taller'); }
+  get howTo() {
+    return [
+      L('Ang "baka" ay batang nakayuko. Bawat level, tumataas siya.', 'The "baka" (cow) is a kid bending over. Every level they stand a little taller.'),
+      L('Tumakbo nang mabilis, tapos tumalon kapag nasa berdeng guhit ka.', 'Sprint at full speed, then jump when you reach the green mark on the ground.'),
+      L('Masyadong maaga o malapit, o kulang sa bilis, at babangga ka.', 'Jump too early, too close, or too slow and you crash into the baka.'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(-8.6, 0, 19.5),
     labelPos: new THREE.Vector3(-12.2, 2.9, 19.5),
@@ -83,7 +92,7 @@ export class LuksongBaka extends BaseGame {
     this.lives = LIVES;
     this.score = 0;
     this.perfects = 0;
-    touch.setActionLabel('Lundag');
+    touch.setActionLabel(L('Lundag', 'Jump'));
     hud.setCrosshair(true);
     this.ctx.player.jumpEnabled = false;
     this.zone.visible = true;
@@ -117,7 +126,7 @@ export class LuksongBaka extends BaseGame {
     this.phase = 'ready';
     this.timer = 1.0;
     hud.toast(`Level ${this.level}`, 'small', 900);
-    hud.setObjective(isTouch() ? 'Itulak nang todo ang joystick, tapos Lundag sa berdeng guhit!' : 'Shift para tumakbo, tapos Space o click sa berdeng guhit!');
+    hud.setObjective(isTouch() ? L('Itulak nang todo ang joystick, tapos Lundag sa berdeng guhit!', 'Push the joystick all the way, then tap Jump at the green mark!') : L('Shift para tumakbo, tapos Space o click sa berdeng guhit!', 'Hold Shift to sprint, then Space or click at the green mark!'));
   }
 
   update(dt: number): void {
@@ -138,13 +147,13 @@ export class LuksongBaka extends BaseGame {
         break;
       case 'run': {
         const d = player.position.x - B.x; // distance before the baka
-        hud.setMeter(Math.min(1, player.speed / RUN_MAX), minSpeed / RUN_MAX, 1, `Bilis  ${player.speed.toFixed(1)} / ${minSpeed.toFixed(1)}`);
+        hud.setMeter(Math.min(1, player.speed / RUN_MAX), minSpeed / RUN_MAX, 1, `${L('Bilis', 'Speed')}  ${player.speed.toFixed(1)} / ${minSpeed.toFixed(1)}`);
         if (input.pressed('jump') || input.pressed('action') || input.tapPressed) {
-          if (d > zone[1] + 0.05) this.crash('Masyadong maaga!');
-          else if (d < zone[0] - 0.05) this.crash('Masyadong malapit!');
-          else if (player.speed < minSpeed) this.crash('Kulang sa bilis! Tumakbo ka.');
+          if (d > zone[1] + 0.05) this.crash(L('Masyadong maaga!', 'Too early!'));
+          else if (d < zone[0] - 0.05) this.crash(L('Masyadong malapit!', 'Too close!'));
+          else if (player.speed < minSpeed) this.crash(L('Kulang sa bilis! Tumakbo ka.', 'Not fast enough! Sprint first.'));
           else this.vault(d, zone, minSpeed, idx);
-        } else if (d < 0.35) this.crash('Nabangga mo ang baka!');
+        } else if (d < 0.35) this.crash(L('Nabangga mo ang baka!', 'You bumped into the baka!'));
         else if (Math.abs(player.position.z - B.z) > 3 || player.position.x > START_X + 3) {
           // wandered off the lane: put them back without a penalty
           player.teleport(START_X, 0, B.z, YAW, -0.12);
@@ -173,7 +182,7 @@ export class LuksongBaka extends BaseGame {
         }
         break;
     }
-    hud.setStat(`Level ${this.level}   ${'♥'.repeat(this.lives)}${'♡'.repeat(LIVES - this.lives)}   Puntos: ${this.score}   ${this.battleText()}`);
+    hud.setStat(`Level ${this.level}   ${'♥'.repeat(this.lives)}${'♡'.repeat(LIVES - this.lives)}   ${L('Puntos', 'Score')}: ${this.score}   ${this.battleText()}`);
     this.battleCheck();
   }
 
@@ -184,7 +193,7 @@ export class LuksongBaka extends BaseGame {
     const pts = 10 * this.level + (perfect ? 5 : 0);
     this.score += pts;
     if (perfect) this.perfects++;
-    hud.toast(perfect ? `Perpekto! +${pts}` : `Lusot! +${pts}`, 'good', 900);
+    hud.toast(perfect ? L(`Perpekto! +${pts}`, `Perfect! +${pts}`) : L(`Lusot! +${pts}`, `Cleared! +${pts}`), 'good', 900);
     audio.play(perfect ? 'perfect' : 'whiff');
     audio.play('cheer');
     hud.setMeter(null);
@@ -200,7 +209,7 @@ export class LuksongBaka extends BaseGame {
   private crash(msg: string): void {
     const { player, hud, audio } = this.ctx;
     this.lives--;
-    hud.toast(this.lives > 0 ? `${msg} -1 buhay` : msg, 'bad', 1300);
+    hud.toast(this.lives > 0 ? `${msg} ${L('-1 buhay', '-1 life')}` : msg, 'bad', 1300);
     hud.setMeter(null);
     audio.play('thud');
     // bounce back off the baka
@@ -214,9 +223,9 @@ export class LuksongBaka extends BaseGame {
   private endRun(): void {
     this.phase = 'done';
     this.ctx.hud.setMeter(null);
-    this.ctx.hud.setObjective(this.multiplayer ? 'Tapos ka na. Hinihintay ang iba...' : '');
+    this.ctx.hud.setObjective(this.multiplayer ? L('Tapos ka na. Hinihintay ang iba...', "You're done. Waiting for the others...") : '');
     const cleared = this.level - 1;
-    this.battleReport(this.score, true, cleared >= 5, [`Pinakamataas na level: ${cleared}`, `Perpekto: ${this.perfects}`]);
+    this.battleReport(this.score, true, cleared >= 5, [L(`Pinakamataas na level: ${cleared}`, `Highest level: ${cleared}`), L(`Perpekto: ${this.perfects}`, `Perfect jumps: ${this.perfects}`)]);
   }
 
   protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
@@ -225,11 +234,11 @@ export class LuksongBaka extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Nakalundag ako hanggang level ${lvl} sa Luksong Baka, ${mine.score} puntos sa Hari ng Kanto!`,
+      shareText: L(`Nakalundag ako hanggang level ${lvl} sa Luksong Baka, ${mine.score} puntos sa Hari ng Kanto!`, `I leapfrogged up to level ${lvl} in Luksong Baka, ${mine.score} points on Hari ng Kanto!`),
     });
   }
 }

@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
@@ -90,7 +91,16 @@ export class Piko extends BaseGame {
   readonly id = 'piko';
   readonly name = 'Piko';
   readonly implemented = true;
-  readonly where = 'sa bakuran sa likod ng pink na bahay';
+  get where() { return L('sa bakuran sa likod ng pink na bahay', 'in the yard behind the pink house'); }
+  get blurb() { return L('Piko: ihagis ang pamato at mag-hop', 'Filipino hopscotch with a lucky stone'); }
+  get howTo() {
+    return [
+      L('Ihagis ang pamato (bato) sa kahong naka-highlight. Bitawan kapag nasa berde ang guhit.', 'Toss your "pamato" (stone) into the glowing square. Release when the marker is in the green.'),
+      L('Mag-hop papuntang LANGIT at pabalik. Laktawan ang kahong may pamato.', 'Hop up to LANGIT (the half circle) and back, skipping the square with your stone.'),
+      L('Pabalik, pulutin ang pamato. Pindutin kapag nasa berde para hindi matumba.', 'On the way back, pick up your stone. Press while the marker is in the green to keep your balance.'),
+      L('Tapusin ang kahon 1 hanggang 8.', 'Clear squares 1 to 8 to win.'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(16.3, 0, -16.3),
     labelPos: new THREE.Vector3(20.3, 2.7, -16.3),
@@ -236,7 +246,7 @@ export class Piko extends BaseGame {
     this.perfects = 0;
     this.tossMisses = 0;
     player.moveEnabled = false;
-    touch.setActionLabel('Hop');
+    touch.setActionLabel(L('Hop', 'Hop'));
     touch.setJumpVisible(false);
     hud.setCrosshair(true);
     this.beginTurn();
@@ -251,7 +261,7 @@ export class Piko extends BaseGame {
     this.hideGuides();
     player.moveEnabled = true;
     player.lookEnabled = true;
-    touch.setActionLabel('Bato');
+    touch.setActionLabel(L('Bato', 'Throw'));
     touch.setJumpVisible(true);
     hud.clearGameWidgets();
   }
@@ -265,8 +275,10 @@ export class Piko extends BaseGame {
     player.lookEnabled = true;
     player.teleport(START.x, 0, START.z, FACE_FWD, -0.45);
     hud.setObjective(
-      `1/3  Ihagis ang pamato sa kahong ${this.target} (berde). ` +
-        (isTouch() ? 'Pindutin nang matagal ang Hop, bitawan kapag nasa berde ang guhit.' : 'Pindutin nang matagal ang click, bitawan kapag nasa berde ang guhit.'),
+      L(`1/3  Ihagis ang pamato sa kahong ${this.target} (berde). `, `1/3  Toss your stone into square ${this.target} (green). `) +
+        (isTouch()
+          ? L('Pindutin nang matagal ang Hop, bitawan kapag nasa berde ang guhit.', 'Hold Hop and release when the marker is in the green.')
+          : L('Pindutin nang matagal ang click, bitawan kapag nasa berde ang guhit.', 'Hold the mouse button and release when the marker is in the green.')),
     );
     hud.setMeter(null);
     this.hideGuides();
@@ -326,7 +338,7 @@ export class Piko extends BaseGame {
             this.powerDir = 1;
           }
           const [z0, z1] = this.targetZone();
-          hud.setMeter(this.power, z0, z1, 'Lakas: bitawan sa berde');
+          hud.setMeter(this.power, z0, z1, L('Lakas: bitawan sa berde', 'Power: release in the green'));
           this.previewToss();
         } else if (this.aiming) {
           this.aiming = false;
@@ -366,7 +378,13 @@ export class Piko extends BaseGame {
         this.standT += dt;
         const hurry = this.standT > STAND_MAX - 1.6;
         const key = this.ctx.isTouch() ? 'Tap' : 'Click';
-        const label = hurry ? 'Bilisan! Nanginginig na!' : pickup ? `Pulutin ang pamato! (${key})` : this.wobbled ? 'Ingat! Isa pang mali, tumba.' : `${key} sa berde para mag-hop`;
+        const label = hurry
+          ? L('Bilisan! Nanginginig na!', 'Hurry! Your leg is shaking!')
+          : pickup
+            ? L(`Pulutin ang pamato! (${key})`, `Pick up your stone! (${key})`)
+            : this.wobbled
+              ? L('Ingat! Isa pang mali, tumba.', 'Careful! One more miss and you fall.')
+              : L(`${key} sa berde para mag-hop`, `${key} in the green to hop`);
         hud.setMeter(this.sway, 0.5 - half, 0.5 + half, label);
         // the ring shows where this press takes you (or the pamato to pick up)
         const nxt = pickup ? this.pamato.position : this.stops[this.stopI + 1]?.pos;
@@ -377,7 +395,7 @@ export class Piko extends BaseGame {
           this.nextRing.scale.setScalar(pickup ? 0.6 : 1 + Math.sin(this.glowT * 6) * 0.08);
         }
         if (this.standT > STAND_MAX) {
-          this.fail('Natumba ka! Matagal kang nakatayo.');
+          this.fail(L('Natumba ka! Matagal kang nakatayo.', 'You toppled over! You stood too long.'));
           break;
         }
         if (press) {
@@ -387,11 +405,11 @@ export class Piko extends BaseGame {
               // one free wobble per stop
               this.wobbled = true;
               this.standT = Math.min(this.standT, STAND_MAX - 2.2);
-              hud.toast('Muntik na!', 'small', 700);
+              hud.toast(L('Muntik na!', 'Whoa, close one!'), 'small', 700);
               audio.play('whiff', { vol: 0.8 });
               break;
             }
-            this.fail(pickup ? 'Nahulog ka habang pumupulot!' : 'Natapakan mo ang linya!');
+            this.fail(pickup ? L('Nahulog ka habang pumupulot!', 'You fell while picking it up!') : L('Natapakan mo ang linya!', 'You stepped on a line!'));
             break;
           }
           if (off < half * 0.3) {
@@ -403,7 +421,7 @@ export class Piko extends BaseGame {
           if (pickup) {
             this.pamato.visible = false;
             this.ctx.audio.play('pickup');
-            hud.toast('Napulot!', 'small', 600);
+            hud.toast(L('Napulot!', 'Got it!'), 'small', 600);
             this.standT = 0;
             this.wobbled = false;
             this.swayPhase = Math.random() * 6;
@@ -425,7 +443,7 @@ export class Piko extends BaseGame {
       }
       case 'turn': {
         if (this.turnT === 0)
-          hud.setObjective(`3/3  Pabalik! Pulutin ang pamato mula sa kahong katabi nito, tapos lumabas.`);
+          hud.setObjective(L('3/3  Pabalik! Pulutin ang pamato mula sa kahong katabi nito, tapos lumabas.', '3/3  Head back! Pick up your stone from the square next to it, then hop out.'));
         this.turnT = Math.min(1, this.turnT + dt / 0.5);
         this.yaw = this.turnFrom + Math.PI * (this.turnT * this.turnT * (3 - 2 * this.turnT));
         const p = this.stops[this.stopI].pos;
@@ -441,7 +459,7 @@ export class Piko extends BaseGame {
         }
         break;
     }
-    hud.setStat(`Square ${this.target}/8   ${'♥'.repeat(this.lives)}${'♡'.repeat(LIVES - this.lives)}   Puntos: ${this.score}   ${this.battleText()}`);
+    hud.setStat(`Square ${this.target}/8   ${'♥'.repeat(this.lives)}${'♡'.repeat(LIVES - this.lives)}   ${L('Puntos', 'Score')}: ${this.score}   ${this.battleText()}`);
     this.battleCheck();
   }
 
@@ -482,11 +500,11 @@ export class Piko extends BaseGame {
   private judgeToss(): void {
     const j = this.judgePoint(this.tossTo);
     if (!j.ok) {
-      const msg = !j.cell ? 'Labas sa kahon ang pamato!' : `Sa ${j.cell.n === 9 ? 'langit' : j.cell.n} napunta, hindi sa ${this.target}!`;
+      const msg = !j.cell ? L('Labas sa kahon ang pamato!', 'The stone missed the grid!') : L(`Sa ${j.cell.n === 9 ? 'langit' : j.cell.n} napunta, hindi sa ${this.target}!`, `It landed in ${j.cell.n === 9 ? 'langit' : j.cell.n}, not ${this.target}!`);
       this.tossMisses++;
       if (this.tossMisses === 1) {
         // first miss on each square is free
-        this.ctx.hud.toast(`${msg} Isa pa, libre!`, 'small', 1400);
+        this.ctx.hud.toast(`${msg} ${L('Isa pa, libre!', 'Free retry!')}`, 'small', 1400);
         this.ctx.audio.play('thud', { vol: 0.5 });
         this.phase = 'fall';
         this.fallT = 1.1;
@@ -496,10 +514,13 @@ export class Piko extends BaseGame {
     }
     const cell = j.cell!;
     this.landedCell = cell;
-    this.ctx.hud.toast('Pasok!', 'good', 700);
+    this.ctx.hud.toast(L('Pasok!', "It's in!"), 'good', 700);
     this.buildStops();
     this.ctx.hud.setObjective(
-      `2/3  Mag-hop papuntang LANGIT at pabalik. Laktawan ang ${this.target} (pula). ${this.ctx.isTouch() ? 'Tap' : 'Click o Space'} kapag nasa berde ang guhit.`,
+      L(
+        `2/3  Mag-hop papuntang LANGIT at pabalik. Laktawan ang ${this.target} (pula). ${this.ctx.isTouch() ? 'Tap' : 'Click o Space'} kapag nasa berde ang guhit.`,
+        `2/3  Hop up to LANGIT and back, skipping square ${this.target} (red). ${this.ctx.isTouch() ? 'Tap' : 'Click or press Space'} when the marker is in the green.`,
+      ),
     );
     this.targetGlow.visible = false;
     this.cover(this.skipGlow, cell);
@@ -564,7 +585,7 @@ export class Piko extends BaseGame {
     // pick-up rule: the pamato must be off the grid before you pass its square
     const stop = this.stops[this.stopI];
     if (this.stopI === this.stops.length - 1) {
-      if (this.pamato.visible) return this.fail('Nakalimutan mo ang pamato!');
+      if (this.pamato.visible) return this.fail(L('Nakalimutan mo ang pamato!', 'You forgot your stone!'));
       this.squareCleared();
       return;
     }
@@ -572,7 +593,7 @@ export class Piko extends BaseGame {
       this.phase = 'turn';
       this.turnT = 0;
       this.turnFrom = this.yaw;
-      this.ctx.hud.toast('Langit! Balik na.', 'small', 800);
+      this.ctx.hud.toast(L('Langit! Balik na.', 'Langit! Now turn back.'), 'small', 800);
       return;
     }
     this.standAt();
@@ -585,11 +606,11 @@ export class Piko extends BaseGame {
     this.group.kids.forEach((k) => (k.mode = 'cheer'));
     if (this.target >= 8) {
       this.score += this.lives * 10;
-      hud.toast('Panalo sa Piko!', 'good', 1400);
+      hud.toast(L('Panalo sa Piko!', 'You beat Piko!'), 'good', 1400);
       this.endRun(true);
       return;
     }
-    hud.toast(`Square ${this.target}, tapos!`, 'good', 1000);
+    hud.toast(L(`Square ${this.target}, tapos!`, `Square ${this.target} cleared!`), 'good', 1000);
     this.target++;
     this.tossMisses = 0;
     this.battleReport(this.score, false);
@@ -600,7 +621,7 @@ export class Piko extends BaseGame {
   private fail(msg: string): void {
     const { hud, audio, player } = this.ctx;
     this.lives--;
-    hud.toast(this.lives > 0 ? `${msg} -1 buhay` : msg, 'bad', 1300);
+    hud.toast(this.lives > 0 ? `${msg} ${L('-1 buhay', '-1 life')}` : msg, 'bad', 1300);
     hud.setMeter(null);
     audio.play('thud');
     this.pamato.visible = this.pamato.visible && this.phase === 'toss';
@@ -616,9 +637,9 @@ export class Piko extends BaseGame {
     this.phase = 'done';
     this.ctx.hud.setMeter(null);
     this.hideGuides();
-    this.ctx.hud.setObjective(this.multiplayer ? 'Tapos ka na. Hinihintay ang iba...' : '');
+    this.ctx.hud.setObjective(this.multiplayer ? L('Tapos ka na. Hinihintay ang iba...', "You're done. Waiting for the others...") : '');
     const cleared = won ? 8 : this.target - 1;
-    this.battleReport(this.score, true, won, [`Squares: ${cleared}/8`, `Buhay na natira: ${Math.max(0, this.lives)}/${LIVES}`, `Perfect na hop: ${this.perfects}`]);
+    this.battleReport(this.score, true, won, [`Squares: ${cleared}/8`, L(`Buhay na natira: ${Math.max(0, this.lives)}/${LIVES}`, `Lives left: ${Math.max(0, this.lives)}/${LIVES}`), L(`Perfect na hop: ${this.perfects}`, `Perfect hops: ${this.perfects}`)]);
   }
 
   protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
@@ -627,11 +648,11 @@ export class Piko extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Naka-${sq} square ako sa Piko, ${mine.score} puntos sa Hari ng Kanto!`,
+      shareText: L(`Naka-${sq} square ako sa Piko, ${mine.score} puntos sa Hari ng Kanto!`, `I cleared ${sq} squares in Piko, ${mine.score} points on Hari ng Kanto!`),
     });
   }
 }

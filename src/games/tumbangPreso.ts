@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import type { RigidBody } from '@dimforge/rapier3d-compat';
 import { RAPIER } from '../core/physics';
@@ -81,7 +82,16 @@ export class TumbangPreso extends BaseGame {
   readonly id = 'tumbangPreso';
   readonly name = 'Tumbang Preso';
   readonly implemented = true;
-  readonly where = 'sa plaza, malapit sa malaking puno';
+  get where() { return L('sa plaza, malapit sa malaking puno', 'in the plaza by the big tree'); }
+  get blurb() { return L('Patumbahin ang lata gamit ang tsinelas', 'Knock down the can with your flip-flop'); }
+  get howTo() {
+    return [
+      L('Ibato ang tsinelas mo mula sa likod ng linya para matumba ang lata.', 'Throw your flip-flop from behind the chalk line and try to knock the can over.'),
+      L('Takbo, kunin ang tsinelas mo, at bumalik sa likod ng linya.', 'Run out, grab your flip-flop, and get back behind the line.'),
+      L('Habang nakatayo ang lata, pwede kang tayain ng taya kapag hawak mo na ang tsinelas.', 'While the can is standing, the guard (the "taya") can tag you once you are holding your flip-flop.'),
+      L('Habang nakahiga ang lata, ligtas ka. Bilisan!', 'While the can is down, you are safe. Hurry!'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(-12, 0, 12),
     labelPos: new THREE.Vector3(-14.5, 2.9, 12),
@@ -195,9 +205,9 @@ export class TumbangPreso extends BaseGame {
     this.board = [];
     this.canTarget.p.set(HOME.x, CAN_H / 2, HOME.z);
     this.canTarget.q.identity();
-    touch.setActionLabel('Bato');
+    touch.setActionLabel(L('Bato', 'Throw'));
     hud.setCrosshair(true);
-    hud.setObjective('Handa na...');
+    hud.setObjective(L('Handa na...', 'Get ready...'));
 
     if (this.isHost) {
       const { physics } = this.ctx;
@@ -308,7 +318,7 @@ export class TumbangPreso extends BaseGame {
     if (canThrow && input.down('action')) {
       if (player.position.x < LINE_X + 0.05) {
         if (this.warnCooldown <= 0) {
-          hud.toast('Sa likod ng linya!', 'bad', 900);
+          hud.toast(L('Sa likod ng linya!', 'Behind the line!'), 'bad', 900);
           this.warnCooldown = 1.2;
         }
       } else {
@@ -340,30 +350,32 @@ export class TumbangPreso extends BaseGame {
 
     // HUD
     const obj: Record<PPhase, string> = {
-      throw: isTouch() ? 'Pindutin nang matagal ang Bato, bitawan para ibato!' : 'Pindutin nang matagal ang click, bitawan para ibato!',
-      out: 'Kunin ang tsinelas mo, tapos bumalik sa likod ng linya!',
-      return: 'Bumalik sa likod ng linya!',
-      safe: this.multiplayer ? 'Ligtas ka! Hintayin ang iba.' : 'Ligtas ka!',
-      tagged: 'Na-taya ka. Hintayin ang susunod na round.',
-      missed: 'Hintayin ang susunod na round.',
+      throw: isTouch()
+        ? L('Pindutin nang matagal ang Bato, bitawan para ibato!', 'Hold Throw to power up, release to throw!')
+        : L('Pindutin nang matagal ang click, bitawan para ibato!', 'Hold the mouse button to power up, release to throw!'),
+      out: L('Kunin ang tsinelas mo, tapos bumalik sa likod ng linya!', 'Grab your flip-flop, then get back behind the line!'),
+      return: L('Bumalik sa likod ng linya!', 'Get back behind the line!'),
+      safe: this.multiplayer ? L('Ligtas ka! Hintayin ang iba.', "You're safe! Wait for the others.") : L('Ligtas ka!', "You're safe!"),
+      tagged: L('Na-taya ka. Hintayin ang susunod na round.', 'You got tagged. Wait for the next round.'),
+      missed: L('Hintayin ang susunod na round.', 'Wait for the next round.'),
       taya:
         this.canState === 1
-          ? 'Natumba ang lata! Puntahan mo para kunin.'
+          ? L('Natumba ang lata! Puntahan mo para kunin.', 'The can is down! Go pick it up.')
           : this.canState === 2
-            ? 'Ibalik ang lata sa bilog!'
-            : 'Ikaw ang TAYA! Habang nakatayo ang lata, tayain ang may hawak nang tsinelas.',
+            ? L('Ibalik ang lata sa bilog!', 'Put the can back in the circle!')
+            : L('Ikaw ang TAYA! Habang nakatayo ang lata, tayain ang may hawak nang tsinelas.', "You're the TAYA (guard)! While the can stands, tag anyone holding their flip-flop."),
     };
     // the taya may not cross the throw line
     if (this.myPhase === 'taya' && player.position.x > LINE_X - 0.25) {
       player.teleport(LINE_X - 0.3, player.position.y, player.position.z, player.yaw, player.pitch);
       this.tayaWarnT -= dt;
       if (this.tayaWarnT <= 0) {
-        hud.toast('Bawal lumampas sa linya ang taya!', 'bad', 900);
+        hud.toast(L('Bawal lumampas sa linya ang taya!', "The taya can't cross the line!"), 'bad', 900);
         this.tayaWarnT = 1.5;
       }
     }
-    hud.setObjective(this.round ? obj[this.myPhase] : 'Handa na...');
-    let stat = `Round ${Math.max(1, this.round)}/${ROUNDS}   Puntos: ${this.myScore}`;
+    hud.setObjective(this.round ? obj[this.myPhase] : L('Handa na...', 'Get ready...'));
+    let stat = `Round ${Math.max(1, this.round)}/${ROUNDS}   ${L('Puntos', 'Score')}: ${this.myScore}`;
     if (this.multiplayer && this.board.length > 1) stat += '   ' + this.board.slice(0, 4).map(([id, s]) => `${this.nameOf(id)} ${s}`).join(' · ');
     hud.setStat(stat);
     hud.setTimer(this.round && this.myPhase !== 'throw' ? String(Math.max(0, Math.ceil(this.timeLeft))) : null);
@@ -437,8 +449,8 @@ export class TumbangPreso extends BaseGame {
           this.myPhase = 'taya';
           this.myHolding = false;
           this.ctx.hand.setHolding(false);
-          touch.setActionLabel('Taya');
-          hud.toast(`Round ${this.round}: Ikaw ang TAYA!`, 'bad', 1600);
+          touch.setActionLabel(L('Taya', 'Tag'));
+          hud.toast(L(`Round ${this.round}: Ikaw ang TAYA!`, `Round ${this.round}: You're the TAYA!`), 'bad', 1600);
         } else {
           // thrower slots skip the taya so everyone stays spread out
           const throwers = this.roster().filter((id) => id !== this.tayaId);
@@ -446,8 +458,8 @@ export class TumbangPreso extends BaseGame {
           player.teleport(START_X, 0, SLOT_Z[slot % SLOT_Z.length], Math.PI / 2, -0.06);
           this.myPhase = 'throw';
           this.myHolding = true;
-          touch.setActionLabel('Bato');
-          hud.toast(this.tayaId ? `Round ${this.round}: si ${this.nameOf(this.tayaId)} ang taya` : `Round ${this.round}`, 'small', 1400);
+          touch.setActionLabel(L('Bato', 'Throw'));
+          hud.toast(this.tayaId ? L(`Round ${this.round}: si ${this.nameOf(this.tayaId)} ang taya`, `Round ${this.round}: ${this.nameOf(this.tayaId)} is the taya`) : `Round ${this.round}`, 'small', 1400);
         }
         break;
       }
@@ -577,7 +589,7 @@ export class TumbangPreso extends BaseGame {
     }
 
     if (this.humanTaya && this.tayaId && !this.parts.has(this.tayaId) && this.hostPhase === 'play') {
-      this.toast(null, 'Umalis ang taya. Bagong round!', 'bad', 1400);
+      this.toast(null, L('Umalis ang taya. Bagong round!', 'The taya left. New round!'), 'bad', 1400);
       this.tayaId = null;
       this.hostPhase = 'over';
       this.overT = 1.5;
@@ -598,7 +610,7 @@ export class TumbangPreso extends BaseGame {
       else this.hostTaya(dt);
       const allDone = [...this.parts.values()].every((p) => p.phase === 'safe' || p.phase === 'tagged' || p.phase === 'missed' || p.phase === 'taya');
       if (allDone || this.roundT > ROUND_TIME) {
-        if (!allDone) this.toast(null, 'Ubos ang oras!', 'bad', 1300);
+        if (!allDone) this.toast(null, L('Ubos ang oras!', "Time's up!"), 'bad', 1300);
         for (const p of this.parts.values()) if (p.phase === 'throw' || p.phase === 'out' || p.phase === 'return') p.phase = 'missed';
         this.hostPhase = 'over';
         this.overT = 2.4;
@@ -657,7 +669,7 @@ export class TumbangPreso extends BaseGame {
         if (Math.hypot(t.x - tp.x, t.z - tp.z) < 0.95) {
           can.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
           this.carrying = true;
-          this.toast(id, 'Hawak mo ang lata! Ibalik sa bilog.', 'small', 1100);
+          this.toast(id, L('Hawak mo ang lata! Ibalik sa bilog.', 'Got the can! Put it back in the circle.'), 'small', 1100);
         }
       } else {
         const yaw = this.yawOf(id);
@@ -670,7 +682,7 @@ export class TumbangPreso extends BaseGame {
           this.lastToucher = null;
           me.score += 2;
           me.resets++;
-          this.toast(null, 'Nakatayo na ang lata! Takbo!', 'bad', 1100);
+          this.toast(null, L('Nakatayo na ang lata! Takbo!', 'The can is back up! Run!'), 'bad', 1100);
           this.sfx('clang', HOME);
         }
       }
@@ -688,8 +700,8 @@ export class TumbangPreso extends BaseGame {
         me.score += 10;
         me.tagsMade++;
         this.nextTaya = p.id;
-        this.toast(p.id, 'Taya ka! Ikaw ang susunod na taya.', 'bad', 1600);
-        this.toast(id, `Nataya mo si ${this.net?.nameOf(p.id) ?? 'siya'}! +10`, 'good', 1300);
+        this.toast(p.id, L('Taya ka! Ikaw ang susunod na taya.', "Tagged! You're the next taya."), 'bad', 1600);
+        this.toast(id, L(`Nataya mo si ${this.net?.nameOf(p.id) ?? 'siya'}! +10`, `You tagged ${this.net?.nameOf(p.id) ?? 'them'}! +10`), 'good', 1300);
         this.sfx('tag');
       }
     }
@@ -730,8 +742,8 @@ export class TumbangPreso extends BaseGame {
           who.knockedRound = true;
           who.knocks++;
           who.score += 10;
-          this.toast(who.id, 'Tumba! +10', 'good', 1200);
-          if (this.multiplayer) this.toast(null, `Tumba ni ${this.net!.nameOf(who.id)}!`, 'small', 1000);
+          this.toast(who.id, L('Tumba! +10', 'Knocked down! +10'), 'good', 1200);
+          if (this.multiplayer) this.toast(null, L(`Tumba ni ${this.net!.nameOf(who.id)}!`, `${this.net!.nameOf(who.id)} knocked it down!`), 'small', 1000);
           this.sfx('cheer');
           this.toAll({ k: 'cheer' });
         }
@@ -768,7 +780,7 @@ export class TumbangPreso extends BaseGame {
           p.slip = null;
           p.holding = true;
           p.phase = 'return';
-          this.toast(p.id, 'Nakuha!', 'small', 700);
+          this.toast(p.id, L('Nakuha!', 'Got it!'), 'small', 700);
           this.toAll({ k: 'sfx', name: 'pickup', pos: null, to: p.id });
         }
       }
@@ -776,12 +788,12 @@ export class TumbangPreso extends BaseGame {
       if (p.phase === 'return' && pos && pos.x > LINE_X + 0.3) {
         p.phase = 'safe';
         if (!p.knockedRound && !p.wentOut) {
-          this.toast(p.id, 'Sayang! Walang tumba.', 'small', 1300);
+          this.toast(p.id, L('Sayang! Walang tumba.', 'Too bad! The can stayed up.'), 'small', 1300);
         } else {
           p.retrieves++;
           const pts = this.canUp ? 5 : 10;
           p.score += pts;
-          this.toast(p.id, pts > 5 ? `Bilis! +${pts}` : `Safe! +${pts}`, 'good', 1300);
+          this.toast(p.id, pts > 5 ? L(`Bilis! +${pts}`, `Speedy! +${pts}`) : `Safe! +${pts}`, 'good', 1300);
         }
       }
     }
@@ -846,8 +858,8 @@ export class TumbangPreso extends BaseGame {
           prey.phase = 'tagged';
           prey.holding = false;
           prey.tagged++;
-          this.toast(prey.id, 'Taya ka!', 'bad', 1500);
-          if (this.multiplayer) this.toast(null, `Na-taya si ${this.net!.nameOf(prey.id)}!`, 'small', 1000);
+          this.toast(prey.id, L('Taya ka!', 'Tagged!'), 'bad', 1500);
+          if (this.multiplayer) this.toast(null, L(`Na-taya si ${this.net!.nameOf(prey.id)}!`, `${this.net!.nameOf(prey.id)} got tagged!`), 'small', 1000);
           this.sfx('tag');
           k.mode = 'cheer';
           this.tayaReact = 0.8;
@@ -888,7 +900,7 @@ export class TumbangPreso extends BaseGame {
           this.canUp = true;
           this.lastToucher = null;
           if (play && this.chaseTarget()) {
-            this.toast(null, 'Nakatayo na ang lata! Takbo!', 'bad', 1100);
+            this.toast(null, L('Nakatayo na ang lata! Takbo!', 'The can is back up! Run!'), 'bad', 1100);
             this.tayaState = 'chase';
           } else this.tayaState = 'guard';
         }
@@ -923,10 +935,10 @@ export class TumbangPreso extends BaseGame {
       score: p.score,
       won: p.score >= 20,
       lines: [
-        `Tumba: ${p.knocks}/${ROUNDS}`,
-        `Nakabalik nang ligtas: ${p.retrieves}/${ROUNDS}`,
-        p.tagged ? `Na-taya: ${p.tagged}` : 'Hindi ka na-taya!',
-        ...(p.tayaRounds ? [`Bilang taya: ${p.tagsMade} nataya, ${p.resets} itinayo`] : []),
+        L(`Tumba: ${p.knocks}/${ROUNDS}`, `Knockdowns: ${p.knocks}/${ROUNDS}`),
+        L(`Nakabalik nang ligtas: ${p.retrieves}/${ROUNDS}`, `Safe returns: ${p.retrieves}/${ROUNDS}`),
+        p.tagged ? L(`Na-taya: ${p.tagged}`, `Times tagged: ${p.tagged}`) : UNTOUCHED(),
+        ...(p.tayaRounds ? [L(`Bilang taya: ${p.tagsMade} nataya, ${p.resets} itinayo`, `As taya: ${p.tagsMade} tagged, ${p.resets} can resets`)] : []),
       ],
     }));
     this.endWith(rows);
@@ -944,12 +956,13 @@ export class TumbangPreso extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Naka-${knocks} tumba at ${mine.score} puntos ako sa Tumbang Preso sa Hari ng Kanto!`,
-      feats: mine.lines.includes('Hindi ka na-taya!') ? ['untouched'] : [],
+      shareText: L(`Naka-${knocks} tumba at ${mine.score} puntos ako sa Tumbang Preso sa Hari ng Kanto!`, `I knocked the can down ${knocks} times and scored ${mine.score} in Tumbang Preso on Hari ng Kanto!`),
+      // the host may play in the other language: accept both spellings
+      feats: mine.lines.some((l) => l === 'Hindi ka na-taya!' || l === 'Never tagged!') ? ['untouched'] : [],
     });
   }
 }
@@ -959,3 +972,4 @@ function newPart(id: string): Part {
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
+const UNTOUCHED = () => L('Hindi ka na-taya!', 'Never tagged!');

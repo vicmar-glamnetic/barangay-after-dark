@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import { device } from '../core/device';
 import { copyText, el, onTap } from './dom';
 
@@ -38,19 +39,24 @@ export function escapeInAppBrowser(parent: HTMLElement): void {
     location.href = chromeIntent();
   }
 
-  const app = device.inAppName;
+  const app = device.inAppName === 'app na ito' ? L('app na ito', 'this app') : device.inAppName;
   const steps = device.isIOS
-    ? `Pindutin ang <b>•••</b> o <b>⋯</b> sa ${app}, tapos <b>"Open in external browser"</b> o <b>"Buksan sa Safari"</b>.`
-    : `Kung hindi bumukas, pindutin ang <b>⋮</b> sa itaas, tapos <b>"Open in Chrome"</b> o <b>"Open in browser"</b>.`;
-  const openBtn = el('button.btn', { text: device.isIOS ? 'Buksan sa Safari' : 'Buksan sa Chrome' });
-  const otherBtn = el('button.btn.alt.small', { text: device.isIOS ? 'Kopyahin ang link' : 'Ibang browser' });
-  const stayBtn = el('button.btn.alt.small', { text: 'Dito na lang' });
+    ? L(`Pindutin ang <b>•••</b> o <b>⋯</b> sa ${app}, tapos <b>"Open in external browser"</b> o <b>"Buksan sa Safari"</b>.`,
+        `Tap <b>•••</b> or <b>⋯</b> in ${app}, then <b>"Open in external browser"</b> or <b>"Open in Safari"</b>.`)
+    : L(`Kung hindi bumukas, pindutin ang <b>⋮</b> sa itaas, tapos <b>"Open in Chrome"</b> o <b>"Open in browser"</b>.`,
+        `If nothing opened, tap <b>⋮</b> at the top, then <b>"Open in Chrome"</b> or <b>"Open in browser"</b>.`);
+  const openBtn = el('button.btn', { text: device.isIOS ? L('Buksan sa Safari', 'Open in Safari') : L('Buksan sa Chrome', 'Open in Chrome') });
+  const otherBtn = el('button.btn.alt.small', { text: device.isIOS ? L('Kopyahin ang link', 'Copy the link') : L('Ibang browser', 'Another browser') });
+  const stayBtn = el('button.btn.alt.small', { text: L('Dito na lang', 'Stay here') });
   const note = el('p.hint');
   const card = el(
     'div.card',
     {},
-    el('h2', { text: 'Buksan sa browser' }),
-    el('p', { text: `Nasa loob ka ng ${app}. Mas maayos ang laro sa ${device.isIOS ? 'Safari' : 'Chrome'}: full screen, may tunog, at gumagana ang multiplayer.` }),
+    el('h2', { text: L('Buksan sa browser', 'Open in your browser') }),
+    el('p', { text: L(
+      `Nasa loob ka ng ${app}. Mas maayos ang laro sa ${device.isIOS ? 'Safari' : 'Chrome'}: full screen, may tunog, at gumagana ang multiplayer.`,
+      `You're inside ${app}. The game works much better in ${device.isIOS ? 'Safari' : 'Chrome'}: full screen, sound, and multiplayer.`,
+    ) }),
     el('div.btns.col', {}, openBtn, otherBtn, stayBtn),
     el('p', { html: steps }),
     note,
@@ -63,13 +69,13 @@ export function escapeInAppBrowser(parent: HTMLElement): void {
     if (device.isIOS) {
       // iOS 17+ honours this scheme from many in-app browsers; harmless if not
       location.href = 'x-safari-' + location.href;
-      note.textContent = 'Kung walang nangyari, sundin ang mga hakbang sa ibaba.';
+      note.textContent = L('Kung walang nangyari, sundin ang mga hakbang sa ibaba.', 'If nothing happened, follow the steps below.');
     } else location.href = chromeIntent();
   });
   onTap(otherBtn, async () => {
     if (device.isIOS) {
       const ok = await copyText(location.href);
-      note.textContent = ok ? 'Nakopya! I-paste sa Safari.' : location.href;
+      note.textContent = ok ? L('Nakopya! I-paste sa Safari.', 'Copied! Paste it into Safari.') : location.href;
     } else location.href = anyBrowserIntent();
   });
   onTap(stayBtn, () => layer.remove());

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Physics } from '../core/physics';
 import { FONT } from './textures';
+import { L as tr, getLang } from '../core/i18n';
 
 /** Everything the board shows (filled by the game manager). */
 export interface BoardData {
@@ -103,7 +104,7 @@ export class Blackboard {
 
   /** Redraw if anything changed. Cheap to call often. */
   draw(d: BoardData): void {
-    const key = JSON.stringify(d);
+    const key = getLang() + JSON.stringify(d);
     if (key === this.last) return;
     this.last = key;
     const g = this.canvas.getContext('2d')!;
@@ -143,18 +144,18 @@ export class Blackboard {
     };
 
     // header
-    chalk('LIBRO NG BARANGAY', W / 2, 62, 50, '#ffd166', 'center');
+    chalk(tr('LIBRO NG BARANGAY', 'BARANGAY BOOK'), W / 2, 62, 50, '#ffd166', 'center');
     chalk(d.date, W / 2, 96, 24, 'rgba(244,241,230,0.75)', 'center');
     line(60, 112, W - 60, 112);
 
     // left column: hamon + gawain
     const L = 56;
-    chalk('Hamon ng Araw', L, 160, 32, '#8ecae6');
-    if (d.daily.done) chalk(`${d.daily.name}: TAPOS NA! ✓`, L, 200, 30, '#8be8b9', 'left', 520);
-    else chalk(`${d.daily.name}: ${d.daily.target}+ puntos  (+${d.daily.reward} Tropa)`, L, 200, 28, '#f4f1e6', 'left', 540);
-    chalk(d.streak > 0 ? `Streak: ${d.streak} araw` : 'Simulan ang streak mo!', L, 234, 24, 'rgba(244,241,230,0.75)');
+    chalk(tr('Hamon ng Araw', 'Daily Challenge'), L, 160, 32, '#8ecae6');
+    if (d.daily.done) chalk(tr(`${d.daily.name}: TAPOS NA! ✓`, `${d.daily.name}: DONE! ✓`), L, 200, 30, '#8be8b9', 'left', 520);
+    else chalk(tr(`${d.daily.name}: ${d.daily.target}+ puntos  (+${d.daily.reward} Tropa)`, `${d.daily.name}: score ${d.daily.target}+  (+${d.daily.reward} Tropa)`), L, 200, 28, '#f4f1e6', 'left', 540);
+    chalk(d.streak > 0 ? tr(`Streak: ${d.streak} araw`, `Streak: ${d.streak} days`) : tr('Simulan ang streak mo!', 'Start your streak today!'), L, 234, 24, 'rgba(244,241,230,0.75)');
 
-    chalk('Gawain ngayon', L, 290, 32, '#8ecae6');
+    chalk(tr('Gawain ngayon', "Today's quests"), L, 290, 32, '#8ecae6');
     d.quests.forEach((q, i) => {
       const y = 334 + i * 62;
       box(L, y, q.done);
@@ -174,14 +175,14 @@ export class Blackboard {
 
     // right column: event + top 3 + you
     const R = W * 0.6 + 34;
-    chalk('Ngayong gabi', R, 160, 30, '#8ecae6');
-    chalk(d.event ?? 'Walang event. Abangan!', R, 198, d.event ? 26 : 24, d.event ? '#ffd166' : 'rgba(244,241,230,0.7)', 'left', 360);
+    chalk(tr('Ngayong gabi', 'Tonight'), R, 160, 30, '#8ecae6');
+    chalk(d.event ?? tr('Walang event. Abangan!', 'No event yet. Stay tuned!'), R, 198, d.event ? 26 : 24, d.event ? '#ffd166' : 'rgba(244,241,230,0.7)', 'left', 360);
 
     chalk(`Top ${d.top.game}`, R, 258, 30, '#8ecae6', 'left', 360);
-    chalk('ngayong linggo', R, 286, 22, 'rgba(244,241,230,0.7)');
+    chalk(tr('ngayong linggo', 'this week'), R, 286, 22, 'rgba(244,241,230,0.7)');
     const rows = d.top.rows;
     if (!rows) chalk('(offline)', R, 330, 24, 'rgba(244,241,230,0.6)');
-    else if (!rows.length) chalk('Wala pa. Ikaw na!', R, 330, 26, '#f4f1e6');
+    else if (!rows.length) chalk(tr('Wala pa. Ikaw na!', 'Nobody yet. Be first!'), R, 330, 26, '#f4f1e6');
     else
       rows.slice(0, 3).forEach((r, i) => {
         const y = 330 + i * 40;
@@ -196,7 +197,7 @@ export class Blackboard {
     chalk(`Badges: ${d.badges.got}/${d.badges.total}`, R, 574, 24, '#f4f1e6');
 
     // footer
-    chalk('Lumapit at pindutin para buksan ang buong Libro', W / 2, H - 22, 22, 'rgba(244,241,230,0.6)', 'center');
+    chalk(tr('Lumapit at pindutin para buksan ang buong Libro', 'Walk up and press to open the full book'), W / 2, H - 22, 22, 'rgba(244,241,230,0.6)', 'center');
     this.tex.needsUpdate = true;
   }
 }

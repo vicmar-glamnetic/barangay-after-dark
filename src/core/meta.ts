@@ -10,6 +10,7 @@
  * Barya is a separate wallet from Tropa Points: spending never lowers your rank.
  */
 import { RANKS, SLIPPERS, STAR_THRESHOLDS, rankIndex, today } from './progression';
+import { L } from './i18n';
 import type { SaveData } from './save';
 
 // ================================================================== badges
@@ -31,8 +32,8 @@ export interface Finish {
 
 export interface Badge {
   id: string;
-  name: string;
-  desc: string;
+  readonly name: string;
+  readonly desc: string;
   barya: number;
   /** Checked after every game (and after sorbetes / shop / streak changes). */
   test: (d: SaveData, f: Finish | null) => boolean;
@@ -43,36 +44,44 @@ const playedAll = (d: SaveData) => Object.keys(STAR_THRESHOLDS).every((id) => (d
 const totalPlays = (d: SaveData) => Object.values(d.plays).reduce((a, b) => a + b, 0);
 const is = (f: Finish | null, id: string) => !!f && f.gameId === id;
 
+const badge = (id: string, name: [string, string], desc: [string, string], barya: number, test: Badge['test']): Badge => ({
+  id, barya, test,
+  get name() { return L(name[0], name[1]); },
+  get desc() { return L(desc[0], desc[1]); },
+});
+
 export const BADGES: Badge[] = [
-  { id: 'first', name: 'Unang Laro', desc: 'Tapusin ang unang laro mo.', barya: 20, test: (d) => totalPlays(d) >= 1 },
-  { id: 'allGames', name: 'Laro ng Lahi', desc: 'Laruin lahat ng 9 na laro.', barya: 80, test: playedAll },
-  { id: 'star3', name: 'Tatlong Bituin', desc: 'Makakuha ng ★★★ sa kahit anong laro.', barya: 40, test: (d) => Object.values(d.stars).some((s) => s >= 3) },
-  { id: 'star3All', name: 'Bituin ng Barangay', desc: 'Makakuha ng ★★★ sa lahat ng laro.', barya: 300, test: (d) => Object.keys(STAR_THRESHOLDS).every((id) => (d.stars[id] ?? 0) >= 3) },
-  { id: 'untouched', name: 'Di Mahuli', desc: 'Tumbang Preso: tapusin nang hindi na-taya.', barya: 40, test: (_d, f) => is(f, 'tumbangPreso') && f!.feats.includes('untouched') && f!.score >= 20 },
-  { id: 'sipa20', name: 'Paang Bakal', desc: 'Sipa: 20 sunod-sunod na sipa.', barya: 50, test: (_d, f) => is(f, 'sipa') && f!.score >= 20 },
-  { id: 'lusot', name: 'Lusot!', desc: 'Patintero: makabalik nang walang nawalang buhay.', barya: 50, test: (_d, f) => is(f, 'patintero') && f!.feats.includes('flawless') },
-  { id: 'multo', name: 'Multo', desc: 'Taguan: hindi ka nakita hanggang dulo.', barya: 50, test: (_d, f) => is(f, 'taguan') && f!.feats.includes('unseen') },
-  { id: 'lawin', name: 'Mata ng Lawin', desc: 'Taguan: mahanap lahat bilang taya.', barya: 40, test: (_d, f) => is(f, 'taguan') && f!.feats.includes('foundAll') },
-  { id: 'diAbot', name: 'Di Maabot', desc: 'Langit-Lupa: hindi ka nahuli.', barya: 40, test: (_d, f) => is(f, 'langitLupa') && f!.won },
-  { id: 'piko3', name: 'Ballerina ng Kanto', desc: 'Piko: ★★★', barya: 50, test: (_d, f) => is(f, 'piko') && f!.score >= t3('piko') },
-  { id: 'baka3', name: 'Lundag Kalabaw', desc: 'Luksong Baka: ★★★', barya: 50, test: (_d, f) => is(f, 'luksongBaka') && f!.score >= t3('luksongBaka') },
-  { id: 'holen3', name: 'Asintado', desc: 'Holen: ★★★', barya: 50, test: (_d, f) => is(f, 'holen') && f!.score >= t3('holen') },
-  { id: 'palayok3', name: 'Bulag pero Bihasa', desc: 'Pukpok Palayok: ★★★', barya: 50, test: (_d, f) => is(f, 'pukpokPalayok') && f!.score >= t3('pukpokPalayok') },
-  { id: 'streak3', name: 'Tatlong Araw', desc: '3 araw sunod-sunod na Hamon.', barya: 40, test: (d) => d.streak >= 3 },
-  { id: 'streak7', name: 'Isang Linggo', desc: '7 araw sunod-sunod na Hamon.', barya: 120, test: (d) => d.streak >= 7 },
-  { id: 'streak30', name: 'Isang Buwan', desc: '30 araw sunod-sunod na Hamon.', barya: 500, test: (d) => d.streak >= 30 },
-  { id: 'plays50', name: 'Laging Nasa Kanto', desc: 'Maglaro nang 50 beses.', barya: 80, test: (d) => totalPlays(d) >= 50 },
-  { id: 'plays200', name: 'Tambay ng Taon', desc: 'Maglaro nang 200 beses.', barya: 250, test: (d) => totalPlays(d) >= 200 },
-  { id: 'mpWin', name: 'Hari ng Tropa', desc: 'Manalo sa laro kasama ang tropa.', barya: 50, test: (_d, f) => !!f && f.multiplayer && f.won },
-  { id: 'tourWin', name: 'Kampeon ng Torneo', desc: 'Manalo sa Torneo (3 laro).', barya: 120, test: (_d, f) => !!f && f.tourWon },
-  { id: 'rival', name: 'Talo si Karibal', desc: 'Talunin ang isang karibal.', barya: 30, test: (_d, f) => !!f && f.rivalBeaten },
-  { id: 'rivalMax', name: 'Wala nang Karibal', desc: 'Talunin ang isang karibal sa level 5.', barya: 200, test: (d) => Object.values(d.rivals).some((l) => l >= RIVAL_MAX) },
-  { id: 'fiesta', name: 'Fiesta!', desc: 'Maglaro habang may Fiesta.', barya: 30, test: (_d, f) => !!f && f.event === 'fiesta' },
-  { id: 'dilim', name: 'Sa Dilim', desc: 'Maglaro ng Taguan habang brownout.', barya: 50, test: (_d, f) => is(f, 'taguan') && f!.event === 'brownout' },
-  { id: 'ulan', name: 'Basang Sisiw', desc: 'Maglaro habang umuulan.', barya: 30, test: (_d, f) => !!f && f.event === 'ulan' },
-  { id: 'sorbetes', name: 'Sorbetero!', desc: 'Abutan ang sorbetero.', barya: 30, test: (d) => d.sorbetes >= 1 },
-  { id: 'shop5', name: 'Mayaman', desc: 'Bumili ng 5 bagay sa Tindahan.', barya: 100, test: (d) => d.owned.length >= 5 },
-  { id: 'hari', name: 'Hari ng Kanto', desc: `Abutin ang ranggong ${RANKS[RANKS.length - 1].name}.`, barya: 1000, test: (d) => rankIndex(d.tropaPoints) >= RANKS.length - 1 },
+  badge('first', ['Unang Laro', 'First Game'], ['Tapusin ang unang laro mo.', 'Finish your very first game.'], 20, (d) => totalPlays(d) >= 1),
+  badge('allGames', ['Laro ng Lahi', 'Heritage Player'], ['Laruin lahat ng laro sa barangay.', 'Play every game in the barangay.'], 80, playedAll),
+  badge('star3', ['Tatlong Bituin', 'Three Stars'], ['Makakuha ng ★★★ sa kahit anong laro.', 'Get ★★★ in any game.'], 40, (d) => Object.values(d.stars).some((s) => s >= 3)),
+  badge('star3All', ['Bituin ng Barangay', 'Star of the Barangay'], ['Makakuha ng ★★★ sa lahat ng laro.', 'Get ★★★ in every game.'], 300, (d) => Object.keys(STAR_THRESHOLDS).every((id) => (d.stars[id] ?? 0) >= 3)),
+  badge('untouched', ['Di Mahuli', 'Untouchable'], ['Tumbang Preso: tapusin nang hindi na-taya.', 'Tumbang Preso: finish without ever getting tagged.'], 40, (_d, f) => is(f, 'tumbangPreso') && f!.feats.includes('untouched') && f!.score >= 20),
+  badge('sipa20', ['Paang Bakal', 'Iron Foot'], ['Sipa: 20 sunod-sunod na sipa.', 'Sipa: 20 kicks in a row.'], 50, (_d, f) => is(f, 'sipa') && f!.score >= 20),
+  badge('lusot', ['Lusot!', 'Slipped Through!'], ['Patintero: makabalik nang walang nawalang buhay.', 'Patintero: make it there and back without losing a life.'], 50, (_d, f) => is(f, 'patintero') && f!.feats.includes('flawless')),
+  badge('multo', ['Multo', 'Ghost'], ['Taguan: hindi ka nakita hanggang dulo.', 'Taguan: stay hidden until time runs out.'], 50, (_d, f) => is(f, 'taguan') && f!.feats.includes('unseen')),
+  badge('lawin', ['Mata ng Lawin', 'Hawk Eyes'], ['Taguan: mahanap lahat bilang taya.', 'Taguan: find everyone as the seeker.'], 40, (_d, f) => is(f, 'taguan') && f!.feats.includes('foundAll')),
+  badge('diAbot', ['Di Maabot', 'Out of Reach'], ['Langit-Lupa: hindi ka nahuli.', 'Langit-Lupa: never get caught.'], 40, (_d, f) => is(f, 'langitLupa') && f!.won),
+  badge('piko3', ['Ballerina ng Kanto', 'Street Ballerina'], ['Piko: ★★★', 'Piko (hopscotch): ★★★'], 50, (_d, f) => is(f, 'piko') && f!.score >= t3('piko')),
+  badge('baka3', ['Lundag Kalabaw', 'Carabao Leap'], ['Luksong Baka: ★★★', 'Luksong Baka (leapfrog): ★★★'], 50, (_d, f) => is(f, 'luksongBaka') && f!.score >= t3('luksongBaka')),
+  badge('holen3', ['Asintado', 'Sharpshooter'], ['Holen: ★★★', 'Holen (marbles): ★★★'], 50, (_d, f) => is(f, 'holen') && f!.score >= t3('holen')),
+  badge('palayok3', ['Bulag pero Bihasa', 'Blind but Brilliant'], ['Pukpok Palayok: ★★★', 'Pukpok Palayok (pot breaking): ★★★'], 50, (_d, f) => is(f, 'pukpokPalayok') && f!.score >= t3('pukpokPalayok')),
+  badge('sungka3', ['Hari ng Sungka', 'Sungka Master'], ['Sungka: ★★★', 'Sungka (shell board game): ★★★'], 50, (_d, f) => is(f, 'sungka') && f!.score >= t3('sungka')),
+  badge('trumpo3', ['Ikot Pa More', 'Spin Doctor'], ['Trumpo: ★★★', 'Trumpo (spinning top): ★★★'], 50, (_d, f) => is(f, 'trumpo') && f!.score >= t3('trumpo')),
+  badge('streak3', ['Tatlong Araw', 'Three-Day Streak'], ['3 araw sunod-sunod na Hamon.', 'Finish the daily challenge 3 days in a row.'], 40, (d) => d.streak >= 3),
+  badge('streak7', ['Isang Linggo', 'One-Week Streak'], ['7 araw sunod-sunod na Hamon.', 'Finish the daily challenge 7 days in a row.'], 120, (d) => d.streak >= 7),
+  badge('streak30', ['Isang Buwan', 'One-Month Streak'], ['30 araw sunod-sunod na Hamon.', 'Finish the daily challenge 30 days in a row.'], 500, (d) => d.streak >= 30),
+  badge('plays50', ['Laging Nasa Kanto', 'Always Outside'], ['Maglaro nang 50 beses.', 'Play 50 games.'], 80, (d) => totalPlays(d) >= 50),
+  badge('plays200', ['Tambay ng Taon', 'Regular of the Year'], ['Maglaro nang 200 beses.', 'Play 200 games.'], 250, (d) => totalPlays(d) >= 200),
+  badge('mpWin', ['Hari ng Tropa', 'King of the Crew'], ['Manalo sa laro kasama ang tropa.', 'Win a game against your friends.'], 50, (_d, f) => !!f && f.multiplayer && f.won),
+  badge('tourWin', ['Kampeon ng Torneo', 'Tournament Champion'], ['Manalo sa Torneo (3 laro).', 'Win a 3-game Tournament.'], 120, (_d, f) => !!f && f.tourWon),
+  badge('rival', ['Talo si Karibal', 'Rival Beaten'], ['Talunin ang isang karibal.', 'Beat one of the neighborhood rivals.'], 30, (_d, f) => !!f && f.rivalBeaten),
+  badge('rivalMax', ['Wala nang Karibal', 'No Rivals Left'], ['Talunin ang isang karibal sa level 5.', 'Beat a rival at level 5.'], 200, (d) => Object.values(d.rivals).some((l) => l >= RIVAL_MAX)),
+  badge('fiesta', ['Fiesta!', 'Fiesta!'], ['Maglaro habang may Fiesta.', 'Play a game during a Fiesta night.'], 30, (_d, f) => !!f && f.event === 'fiesta'),
+  badge('dilim', ['Sa Dilim', 'In the Dark'], ['Maglaro ng Taguan habang brownout.', 'Play Taguan (hide and seek) during a brownout.'], 50, (_d, f) => is(f, 'taguan') && f!.event === 'brownout'),
+  badge('ulan', ['Basang Sisiw', 'Soaked'], ['Maglaro habang umuulan.', 'Play a game in the rain.'], 30, (_d, f) => !!f && f.event === 'ulan'),
+  badge('sorbetes', ['Sorbetero!', 'Ice Cream Run'], ['Abutan ang sorbetero.', 'Catch the sorbetero (ice cream cart).'], 30, (d) => d.sorbetes >= 1),
+  badge('shop5', ['Mayaman', 'Big Spender'], ['Bumili ng 5 bagay sa Tindahan.', "Buy 5 things at Aling Nena's store."], 100, (d) => d.owned.length >= 5),
+  badge('hari', ['Hari ng Kanto', 'Hari ng Kanto'], ['Abutin ang pinakamataas na ranggo.', 'Reach the highest rank.'], 1000, (d) => rankIndex(d.tropaPoints) >= RANKS.length - 1),
 ];
 
 /** Award every newly earned badge. Returns the new ones (Barya already added). */
@@ -119,14 +128,15 @@ export function dailyQuests(gameIds: string[], names: Record<string, string>, da
   if (g2 === g1) g2 = pool[(pool.indexOf(g1) + 3) % pool.length];
   const plays = 4 + (h % 3);
   const variety = 3 + ((h >>> 4) % 2);
+  const n1 = names[g1] ?? g1, n2 = names[g2] ?? g2, s2 = STAR_THRESHOLDS[g2][0];
   const quests: Quest[] = [
     (h >>> 12) % 2
-      ? { kind: 'plays', goal: plays, text: `Maglaro nang ${plays} beses` }
-      : { kind: 'variety', goal: variety, text: `Maglaro ng ${variety} magkakaibang laro` },
-    { kind: 'stars', gameId: g1, goal: 2, text: `Makakuha ng ★★ sa ${names[g1] ?? g1}` },
+      ? { kind: 'plays', goal: plays, text: L(`Maglaro nang ${plays} beses`, `Play ${plays} games`) }
+      : { kind: 'variety', goal: variety, text: L(`Maglaro ng ${variety} magkakaibang laro`, `Play ${variety} different games`) },
+    { kind: 'stars', gameId: g1, goal: 2, text: L(`Makakuha ng ★★ sa ${n1}`, `Get ★★ in ${n1}`) },
     (h >>> 16) % 2
-      ? { kind: 'score', gameId: g2, goal: STAR_THRESHOLDS[g2][0], text: `Umabot ng ${STAR_THRESHOLDS[g2][0]} puntos sa ${names[g2] ?? g2}` }
-      : { kind: 'tropa', goal: 150, text: 'Mag-ipon ng 150 Tropa ngayon' },
+      ? { kind: 'score', gameId: g2, goal: s2, text: L(`Umabot ng ${s2} puntos sa ${n2}`, `Score ${s2}+ in ${n2}`) }
+      : { kind: 'tropa', goal: 150, text: L('Mag-ipon ng 150 Tropa ngayon', 'Earn 150 Tropa today') },
   ];
   return quests;
 }
@@ -186,16 +196,32 @@ export function advanceQuests(d: SaveData, qs: Quest[], f: Finish, tropaEarned: 
 
 export const RIVAL_MAX = 5;
 
-export const RIVALS: Record<string, { name: string; taunts: string[]; lose: string; win: string }> = {
-  tumbangPreso: { name: 'Jun-jun', taunts: ['Tsinelas mo, pang-bahay lang!', 'Hindi mo matutumba ang lata ko!'], lose: 'Swerte mo lang yan!', win: 'Hehe, ulit ka na lang!' },
-  sipa: { name: 'Bunso', taunts: ['Sampu lang? Kaya ko yan nang nakapikit!', 'Sipa pa more!'], lose: 'Huy, ang galing mo pala!', win: 'Pang-baguhan pa lang yan!' },
-  patintero: { name: 'Totoy', taunts: ['Walang lumulusot sa linya ko!', 'Bilis mo, pero mas mabilis ako.'], lose: 'Paano ka nakalusot?!', win: 'Taya ka na naman!' },
-  taguan: { name: 'Ising', taunts: ['Kahit saan ka magtago, kita kita!', 'Ako ang reyna ng taguan.'], lose: 'Saan ka nagtago?!', win: 'Nakita na kita, hehe.' },
-  langitLupa: { name: 'Bebang', taunts: ['Langit ka man, maaabot kita!', 'Bilisan mo ang paa mo!'], lose: 'Hay, pagod na ako.', win: 'Huli ka!' },
-  piko: { name: 'Nene', taunts: ['Huwag kang tatapak sa linya, ha!', 'Piko queen ako dito.'], lose: 'Ang ganda ng talon mo!', win: 'Natapakan mo ang linya!' },
-  luksongBaka: { name: 'Kulot', taunts: ['Mataas ang baka ko ngayon!', 'Kaya mo bang lumundag nang ganito?'], lose: 'Ang taas ng lundag mo!', win: 'Bumagsak ka sa baka, hehe.' },
-  holen: { name: 'Dodong', taunts: ['Akin lahat ng holen dito!', 'Tirador ako ng barangay.'], lose: 'Ubos ang holen ko!', win: 'Akin na ang holen mo!' },
-  pukpokPalayok: { name: 'Inday', taunts: ['Basagin mo kung kaya mo!', 'Mag-ingat ka, baka ulo ko ang tamaan mo!'], lose: 'Wow, basag lahat!', win: 'Mali ang palo mo!' },
+export interface Rival {
+  name: string;
+  readonly taunts: string[];
+  readonly lose: string;
+  readonly win: string;
+}
+
+const rival = (name: string, taunts: [string, string][], lose: [string, string], win: [string, string]): Rival => ({
+  name,
+  get taunts() { return taunts.map(([f, e]) => L(f, e)); },
+  get lose() { return L(lose[0], lose[1]); },
+  get win() { return L(win[0], win[1]); },
+});
+
+export const RIVALS: Record<string, Rival> = {
+  tumbangPreso: rival('Jun-jun', [['Tsinelas mo, pang-bahay lang!', 'Those flip-flops are for indoors only!'], ['Hindi mo matutumba ang lata ko!', "You'll never knock my can over!"]], ['Swerte mo lang yan!', 'Lucky shot, that was!'], ['Hehe, ulit ka na lang!', 'Hehe, better luck next time!']),
+  sipa: rival('Bunso', [['Sampu lang? Kaya ko yan nang nakapikit!', 'Only ten? I can do that with my eyes closed!'], ['Sipa pa more!', 'Kick harder!']], ['Huy, ang galing mo pala!', "Whoa, you're actually good!"], ['Pang-baguhan pa lang yan!', 'That was beginner level!']),
+  patintero: rival('Totoy', [['Walang lumulusot sa linya ko!', 'Nobody gets past my line!'], ['Bilis mo, pero mas mabilis ako.', "You're fast, but I'm faster."]], ['Paano ka nakalusot?!', 'How did you get through?!'], ['Taya ka na naman!', 'Tagged again!']),
+  taguan: rival('Ising', [['Kahit saan ka magtago, kita kita!', "Hide anywhere you like, I'll still find you!"], ['Ako ang reyna ng taguan.', "I'm the queen of hide and seek."]], ['Saan ka nagtago?!', 'Where were you hiding?!'], ['Nakita na kita, hehe.', 'Found you, hehe.']),
+  langitLupa: rival('Bebang', [['Langit ka man, maaabot kita!', "Even up high, I'll reach you!"], ['Bilisan mo ang paa mo!', 'Move those feet!']], ['Hay, pagod na ako.', "Phew, I'm tired."], ['Huli ka!', 'Caught you!']),
+  piko: rival('Nene', [['Huwag kang tatapak sa linya, ha!', "Don't you dare step on the lines!"], ['Piko queen ako dito.', "I'm the hopscotch queen around here."]], ['Ang ganda ng talon mo!', 'Beautiful hops!'], ['Natapakan mo ang linya!', 'You stepped on the line!']),
+  luksongBaka: rival('Kulot', [['Mataas ang baka ko ngayon!', 'My "cow" is extra tall today!'], ['Kaya mo bang lumundag nang ganito?', 'Can you jump this high?']], ['Ang taas ng lundag mo!', 'What a jump!'], ['Bumagsak ka sa baka, hehe.', 'You fell on the cow, hehe.']),
+  holen: rival('Dodong', [['Akin lahat ng holen dito!', 'Every marble here is mine!'], ['Tirador ako ng barangay.', "I'm the best shooter in the barangay."]], ['Ubos ang holen ko!', 'You took all my marbles!'], ['Akin na ang holen mo!', 'Your marbles are mine now!']),
+  pukpokPalayok: rival('Inday', [['Basagin mo kung kaya mo!', 'Break it if you can!'], ['Mag-ingat ka, baka ulo ko ang tamaan mo!', "Careful, don't hit my head!"]], ['Wow, basag lahat!', 'Wow, you smashed them all!'], ['Mali ang palo mo!', 'You swung at thin air!']),
+  sungka: rival('Lola Pacing', [['Bata pa lang ako, naglalaro na ako ng sungka.', "I've played sungka since I was a little girl."], ['Bilangin mo nang mabuti ang sigay, apo.', 'Count your shells carefully, apo.']], ['Aba, ang galing ng apo ko!', "My, what a clever grandchild!"], ['Hehe, may matututunan ka pa, apo.', 'Hehe, still lots to learn, apo.']),
+  trumpo: rival('Boyet', [['Ang trumpo ko, hindi tumitigil!', 'My top never stops spinning!'], ['Sugat sa kamay, pero champion!', 'Scraped hands, but a champion!']], ['Ang tagal umikot ng trumpo mo!', 'Your top spun forever!'], ['Tumumba agad, hehe!', 'Fell over already, hehe!']),
 };
 
 /** Score the rival posts at a level (0..RIVAL_MAX-1). Climbs from 1★ to past 3★. */
@@ -213,19 +239,31 @@ export const rivalReward = (level: number) => 25 + level * 20;
 
 export interface ShopItem {
   id: string;
-  kind: 'slipper' | 'title';
+  /** treat = a drink/snack that boosts the next games' Tropa (used up, not kept). */
+  kind: 'slipper' | 'title' | 'treat';
   name: string;
+  nameEn?: string;
   price: number;
   /** slipper: [strap, top] colors. */
   colors?: [number, number];
+  /** treat: how many games it boosts. */
+  games?: number;
+  /** treat: swatch color for the menu. */
+  tint?: number;
 }
 
+/** Tropa multiplier while a treat is active. */
+export const TREAT_MULT = 1.25;
+
 export const SHOP: ShopItem[] = [
-  { id: 's-itim', kind: 'slipper', name: 'Itim na Tsinelas', price: 120, colors: [0x1b1b1f, 0x3a3a44] },
-  { id: 's-pink', kind: 'slipper', name: 'Pink na Tsinelas', price: 150, colors: [0xff4d8d, 0xffa3c4] },
-  { id: 's-kahel', kind: 'slipper', name: 'Kahel na Tsinelas', price: 150, colors: [0xe8590c, 0xffa94d] },
-  { id: 's-puti', kind: 'slipper', name: 'Puting Tsinelas', price: 200, colors: [0xd0d0d0, 0xffffff] },
-  { id: 's-army', kind: 'slipper', name: 'Pang-army', price: 260, colors: [0x4b5320, 0x8a9a5b] },
+  { id: 'd-gulaman', kind: 'treat', name: "Sago't Gulaman", nameEn: "Sago't Gulaman (sweet jelly drink)", price: 40, games: 1, tint: 0xc98b4a },
+  { id: 'd-softdrinks', kind: 'treat', name: 'Softdrinks', nameEn: 'Soda', price: 100, games: 3, tint: 0x8b1e1e },
+  { id: 'd-taho', kind: 'treat', name: 'Taho', nameEn: 'Taho (warm tofu & syrup)', price: 180, games: 6, tint: 0xf3e3c3 },
+  { id: 's-itim', kind: 'slipper', name: 'Itim na Tsinelas', nameEn: 'Black Flip-flops', price: 120, colors: [0x1b1b1f, 0x3a3a44] },
+  { id: 's-pink', kind: 'slipper', name: 'Pink na Tsinelas', nameEn: 'Pink Flip-flops', price: 150, colors: [0xff4d8d, 0xffa3c4] },
+  { id: 's-kahel', kind: 'slipper', name: 'Kahel na Tsinelas', nameEn: 'Orange Flip-flops', price: 150, colors: [0xe8590c, 0xffa94d] },
+  { id: 's-puti', kind: 'slipper', name: 'Puting Tsinelas', nameEn: 'White Flip-flops', price: 200, colors: [0xd0d0d0, 0xffffff] },
+  { id: 's-army', kind: 'slipper', name: 'Pang-army', nameEn: 'Army Camo', price: 260, colors: [0x4b5320, 0x8a9a5b] },
   { id: 's-neon', kind: 'slipper', name: 'Neon', price: 400, colors: [0x39ff14, 0xf72585] },
   { id: 't-lodi', kind: 'title', name: 'Lodi', price: 100 },
   { id: 't-petmalu', kind: 'title', name: 'Petmalu', price: 120 },
@@ -241,13 +279,16 @@ export const shopItem = (id: string) => SHOP.find((s) => s.id === id);
 
 export function buy(d: SaveData, id: string): string | null {
   const it = shopItem(id);
-  if (!it) return 'Wala nito sa tindahan.';
-  if (d.owned.includes(id)) return 'Nasa iyo na ito.';
-  if (d.barya < it.price) return `Kulang ang Barya mo (${it.price - d.barya} pa).`;
+  if (!it) return L('Wala nito sa tindahan.', "The store doesn't sell that.");
+  if (it.kind !== 'treat' && d.owned.includes(id)) return L('Nasa iyo na ito.', 'You already have this.');
+  if (d.barya < it.price) return L(`Kulang ang Barya mo (${it.price - d.barya} pa).`, `Not enough Barya (${it.price - d.barya} more).`);
   d.barya -= it.price;
-  d.owned.push(id);
+  if (it.kind === 'treat') d.boost += it.games ?? 1;
+  else d.owned.push(id);
   return null;
 }
+
+export const itemName = (it: ShopItem) => L(it.name, it.nameEn ?? it.name);
 
 /** Text shown under your name on lobby name tags: title (if equipped) or rank. */
 export function nameTagSub(d: SaveData): string {
@@ -261,20 +302,27 @@ export type EventId = 'fiesta' | 'brownout' | 'ulan' | 'sorbetero';
 
 export interface NightEvent {
   id: EventId;
-  name: string;
+  readonly name: string;
   /** Shown in the HUD chip while active. */
-  chip: string;
+  readonly chip: string;
   /** Toast when it starts. */
-  start: string;
+  readonly start: string;
   /** Tropa multiplier for games finished during it (per game id, '*' = all). */
   mult: Record<string, number>;
 }
 
+const ev = (id: EventId, name: [string, string], chip: [string, string], start: [string, string], mult: Record<string, number>): NightEvent => ({
+  id, mult,
+  get name() { return L(name[0], name[1]); },
+  get chip() { return L(chip[0], chip[1]); },
+  get start() { return L(start[0], start[1]); },
+});
+
 export const EVENTS: Record<EventId, NightEvent> = {
-  fiesta: { id: 'fiesta', name: 'Fiesta', chip: 'FIESTA: x2 Tropa', start: 'Fiesta sa barangay! Doble ang Tropa Points!', mult: { '*': 2 } },
-  brownout: { id: 'brownout', name: 'Brownout', chip: 'BROWNOUT: Taguan x2', start: 'Brownout! Perfect sa Taguan. x2 doon!', mult: { taguan: 2, '*': 1.2 } },
-  ulan: { id: 'ulan', name: 'Ulan', chip: 'UMUULAN: x1.5 Tropa', start: 'Umuulan! Basa pero masaya. x1.5 Tropa!', mult: { '*': 1.5 } },
-  sorbetero: { id: 'sorbetero', name: 'Sorbetero', chip: 'SORBETERO: hanapin siya!', start: 'Ting-ting-ting! May sorbetero! Hanapin mo.', mult: {} },
+  fiesta: ev('fiesta', ['Fiesta', 'Fiesta'], ['FIESTA: x2 Tropa', 'FIESTA: double Tropa'], ['Fiesta sa barangay! Doble ang Tropa Points!', 'Fiesta in the barangay! Double Tropa Points!'], { '*': 2 }),
+  brownout: ev('brownout', ['Brownout', 'Brownout'], ['BROWNOUT: Taguan x2', 'POWER OUT: Taguan x2'], ['Brownout! Perfect sa Taguan. x2 doon!', 'Power outage! Perfect for hide and seek: Taguan pays double!'], { taguan: 2, '*': 1.2 }),
+  ulan: ev('ulan', ['Ulan', 'Rain'], ['UMUULAN: x1.5 Tropa', 'RAIN: x1.5 Tropa'], ['Umuulan! Basa pero masaya. x1.5 Tropa!', "It's raining! Wet but fun. x1.5 Tropa!"], { '*': 1.5 }),
+  sorbetero: ev('sorbetero', ['Sorbetero', 'Ice Cream Cart'], ['SORBETERO: hanapin siya!', 'ICE CREAM: find the cart!'], ['Ting-ting-ting! May sorbetero! Hanapin mo.', 'Ting-ting-ting! The ice cream man is here. Go find him!'], {}),
 };
 
 /** Each slot is 4 minutes; an event runs for the first 3 minutes of about half the slots. */
@@ -321,11 +369,13 @@ export function pushRecord(d: SaveData, gameId: string, score: number): number {
 
 
 export interface SlipperChoice {
+  /** Stable id (rank tsinelas: Filipino name; shop: item id). */
+  id: string;
   name: string;
   strap: number;
   top: number;
   unlocked: boolean;
-  /** Why it is locked ("Ranggo: Tambay" / "Tindahan: 150 Barya"). */
+  /** Why it is locked ("Rank: Corner Regular" / "Store: 150 Barya"). */
   need: string;
 }
 
@@ -333,9 +383,13 @@ export interface SlipperChoice {
 export function slipperChoices(d: SaveData): SlipperChoice[] {
   const have = rankIndex(d.tropaPoints);
   return [
-    ...SLIPPERS.map((s) => ({ name: s.name, strap: s.strap, top: s.top, unlocked: s.rank <= have, need: `Ranggo: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa)` })),
+    ...SLIPPERS.map((s) => ({
+      id: s.id, name: s.name, strap: s.strap, top: s.top, unlocked: s.rank <= have,
+      need: L(`Ranggo: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa)`, `Rank: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa)`),
+    })),
     ...SHOP.filter((it) => it.kind === 'slipper').map((it) => ({
-      name: it.name, strap: it.colors![0], top: it.colors![1], unlocked: d.owned.includes(it.id), need: `Tindahan: ${it.price} Barya`,
+      id: it.id, name: itemName(it), strap: it.colors![0], top: it.colors![1], unlocked: d.owned.includes(it.id),
+      need: L(`Tindahan ni Aling Nena: ${it.price} Barya`, `Aling Nena's store: ${it.price} Barya`),
     })),
   ];
 }

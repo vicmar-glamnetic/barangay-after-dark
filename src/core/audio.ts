@@ -1,3 +1,4 @@
+import { getLang } from './i18n';
 import * as THREE from 'three';
 
 /**
@@ -71,14 +72,20 @@ export class AudioSys {
   // ---------------------------------------------------------------- voice (text to speech)
 
   private voices: SpeechSynthesisVoice[] = [];
+  private voiceLang = '';
 
-  /** Pick voices that read Tagalog words well: Filipino first, then Spanish / Indonesian, then anything. */
+  /**
+   * Filipino: voices that read Tagalog words well (Filipino first, then
+   * Spanish / Indonesian). English: an English voice.
+   */
   private pickVoices(): void {
     const ss = window.speechSynthesis;
     if (!ss) return;
     const all = ss.getVoices();
     if (!all.length) return;
-    for (const pref of ['fil', 'tl', 'es', 'id', 'ms', 'it']) {
+    this.voiceLang = getLang();
+    const prefs = this.voiceLang === 'en' ? ['en-ph', 'en-us', 'en-gb', 'en'] : ['fil', 'tl', 'es', 'id', 'ms', 'it'];
+    for (const pref of prefs) {
       const v = all.filter((x) => x.lang.toLowerCase().replace('_', '-').startsWith(pref));
       if (v.length) {
         this.voices = v;
@@ -111,14 +118,14 @@ export class AudioSys {
     const ss = window.speechSynthesis;
     if (!ss || this.volume <= 0 || !this.live) return;
     try {
-      if (!this.voices.length) this.pickVoices();
+      if (!this.voices.length || this.voiceLang !== getLang()) this.pickVoices();
       if (opts.interrupt !== false) ss.cancel();
       const u = new SpeechSynthesisUtterance(text.trim());
       const v = this.voices[Math.floor(Math.random() * this.voices.length)];
       if (v) {
         u.voice = v;
         u.lang = v.lang;
-      } else u.lang = 'fil-PH';
+      } else u.lang = getLang() === 'en' ? 'en-US' : 'fil-PH';
       u.pitch = opts.pitch ?? 1.5 + Math.random() * 0.3;
       u.rate = opts.rate ?? 1.15;
       u.volume = Math.min(1, this.volume * 1.1);

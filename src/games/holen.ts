@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import type { RigidBody } from '@dimforge/rapier3d-compat';
 import { RAPIER } from '../core/physics';
@@ -39,7 +40,15 @@ export class Holen extends BaseGame {
   readonly id = 'holen';
   readonly name = 'Holen';
   readonly implemented = true;
-  readonly where = 'sa likod ng sari-sari store';
+  get where() { return L('sa likod ng sari-sari store', 'behind the sari-sari store'); }
+  get blurb() { return L('Itira ang holen palabas ng bilog', 'Flick your marble to knock the others out of the ring'); }
+  get howTo() {
+    return [
+      L('May mga holen (marbles) sa loob ng bilog na guhit.', 'A handful of "holen" (marbles) sit inside a chalk ring.'),
+      L('Tumutok, pindutin nang matagal para lumakas, bitawan para tumira.', 'Aim, hold to build power, release to flick your shooter marble.'),
+      L('Ilabas lahat ng holen bago maubos ang tira mo. Mas maraming sabay, mas maraming puntos.', 'Knock every marble out before you run out of shots. Several at once scores extra.'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(8.6, 0, -15.0),
     labelPos: new THREE.Vector3(8.6, 2.6, -17.2),
@@ -121,7 +130,7 @@ export class Holen extends BaseGame {
     this.shootFrom.copy(LINE);
     player.moveEnabled = false;
     player.eyeOffset = -0.95; // crouch
-    touch.setActionLabel('Tira');
+    touch.setActionLabel(L('Tira', 'Shoot'));
     touch.setJumpVisible(false);
     hud.setCrosshair(true);
     this.aimAt();
@@ -139,7 +148,7 @@ export class Holen extends BaseGame {
     player.eyeOffset = 0;
     player.moveEnabled = true;
     player.lookEnabled = true;
-    touch.setActionLabel('Bato');
+    touch.setActionLabel(L('Bato', 'Throw'));
     touch.setJumpVisible(true);
     hud.clearGameWidgets();
   }
@@ -153,7 +162,7 @@ export class Holen extends BaseGame {
     player.lookEnabled = true;
     this.phase = 'aim';
     this.aiming = false;
-    hud.setObjective(isTouch() ? 'I-drag para tumutok. Pindutin nang matagal ang Tira, bitawan para tumira.' : 'Tumutok gamit ang mouse. Pindutin nang matagal ang click, bitawan para tumira.');
+    hud.setObjective(isTouch() ? L('I-drag para tumutok. Pindutin nang matagal ang Tira, bitawan para tumira.', 'Drag to aim. Hold Shoot to build power, release to flick.') : L('Tumutok gamit ang mouse. Pindutin nang matagal ang click, bitawan para tumira.', 'Aim with the mouse. Hold the button to build power, release to flick.'));
   }
 
   // ================================================================== frame
@@ -211,7 +220,7 @@ export class Holen extends BaseGame {
       });
       if (!moving || this.rollT > 6) this.settle();
     }
-    hud.setStat(`Tira: ${this.shots}   Labas: ${this.outCount}/${this.targets.length}   Puntos: ${this.score}   ${this.battleText()}`);
+    hud.setStat(L(`Tira: ${this.shots}   Labas: ${this.outCount}/${this.targets.length}   Puntos: ${this.score}`, `Shots: ${this.shots}   Out: ${this.outCount}/${this.targets.length}   Score: ${this.score}`) + `   ${this.battleText()}`);
     this.battleCheck();
   }
 
@@ -278,16 +287,16 @@ export class Holen extends BaseGame {
     if (gained) {
       this.outCount += gained;
       this.score += gained * 10;
-      hud.toast(gained > 1 ? `${gained} sabay! +${gained * 10}` : '+10', 'good', 900);
+      hud.toast(gained > 1 ? L(`${gained} sabay! +${gained * 10}`, `${gained} at once! +${gained * 10}`) : '+10', 'good', 900);
       audio.play(gained > 1 ? 'cheer' : 'pickup');
       if (gained > 1) this.group.kids.forEach((k) => (k.mode = 'cheer'));
-    } else hud.toast('Wala...', 'small', 700);
+    } else hud.toast(L('Wala...', 'Nothing...'), 'small', 700);
     this.battleReport(this.score, false);
 
     const left = this.targets.length - this.outCount;
     if (left === 0) {
       this.score += 20 + this.shots * 10;
-      hud.toast('Ubos ang holen! Panalo!', 'good', 1500);
+      hud.toast(L('Ubos ang holen! Panalo!', 'Ring cleared! You win!'), 'good', 1500);
       return this.endRun(true);
     }
     if (this.shots <= 0) return this.endRun(false);
@@ -305,8 +314,8 @@ export class Holen extends BaseGame {
   private endRun(won: boolean): void {
     this.phase = 'done';
     this.ctx.player.lookEnabled = false;
-    this.ctx.hud.setObjective(this.multiplayer ? 'Tapos ka na. Hinihintay ang iba...' : '');
-    this.battleReport(this.score, true, won, [`Nailabas: ${this.outCount}/${this.targets.length}`, `Tirang natira: ${this.shots}`]);
+    this.ctx.hud.setObjective(this.multiplayer ? L('Tapos ka na. Hinihintay ang iba...', "You're done. Waiting for the others...") : '');
+    this.battleReport(this.score, true, won, [L(`Nailabas: ${this.outCount}/${this.targets.length}`, `Knocked out: ${this.outCount}/${this.targets.length}`), L(`Tirang natira: ${this.shots}`, `Shots left: ${this.shots}`)]);
   }
 
   protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
@@ -314,11 +323,11 @@ export class Holen extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Naka-${out} holen ako palabas ng bilog, ${mine.score} puntos sa Hari ng Kanto!`,
+      shareText: L(`Naka-${out} holen ako palabas ng bilog, ${mine.score} puntos sa Hari ng Kanto!`, `I knocked ${out} marbles out of the ring, ${mine.score} points on Hari ng Kanto!`),
     });
   }
 }

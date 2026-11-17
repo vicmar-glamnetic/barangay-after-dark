@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GameData } from '../net/session';
@@ -74,7 +75,15 @@ export class LangitLupa extends BaseGame {
   readonly id = 'langitLupa';
   readonly name = 'Langit-Lupa';
   readonly implemented = true;
-  readonly where = 'sa mga kahon sa tabi ng court';
+  get where() { return L('sa mga kahon sa tabi ng court', 'on the crates beside the court'); }
+  get blurb() { return L('Manatili sa mataas para hindi mahuli', 'Stay up high so the tagger cannot catch you'); }
+  get howTo() {
+    return [
+      L('"Langit" = kahit anong mataas (kahon, bangko). "Lupa" = ang lupa. Ang taya ay nasa lupa lang.', '"Langit" (heaven) is anything raised: crates, benches, curbs. "Lupa" (earth) is the ground, where the tagger roams.'),
+      L('Sa langit, ligtas ka, pero bawal tumambay nang matagal. Lumipat bago maubos ang oras.', "Up high you're safe, but you can't camp. Hop to another spot before your timer runs out."),
+      L('Tumagal hanggang dulo nang hindi nahuhuli.', 'Survive until time runs out without getting caught.'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(20.6, 0, 7.8),
     labelPos: new THREE.Vector3(23.5, 3.6, 10.5),
@@ -182,9 +191,9 @@ export class LangitLupa extends BaseGame {
     this.readyT = 2;
     this.me = { state: 'ready', perchLeft: MAX_PERCH, survived: 0, hops: 0 };
     this.board = [];
-    touch.setActionLabel('Talon');
+    touch.setActionLabel(L('Talon', 'Jump'));
     hud.setCrosshair(true);
-    hud.setObjective('Nasa LANGIT ka. Huwag kang mahuli sa LUPA!');
+    hud.setObjective(L('Nasa LANGIT ka. Huwag kang mahuli sa LUPA!', "You're on LANGIT (high ground). Don't get caught on the LUPA (ground)!"));
 
     if (this.isHost) {
       this.parts.clear();
@@ -243,13 +252,13 @@ export class LangitLupa extends BaseGame {
 
     const onLangit = player.position.y > SAFE_HEIGHT;
     let status: string;
-    if (this.me.state === 'out') status = this.multiplayer ? 'Huli ka na. Panoorin ang iba.' : 'Huli ka!';
-    else if (this.me.state === 'ready') status = 'Handa...';
-    else if (!onLangit) status = 'LUPA ka! Umakyat ka sa langit!';
-    else if (this.me.perchLeft <= 0) status = 'Bawal tumambay! Lumipat ka!';
-    else status = `LANGIT ka. Lipat bago ${Math.ceil(this.me.perchLeft)}s`;
+    if (this.me.state === 'out') status = this.multiplayer ? L('Huli ka na. Panoorin ang iba.', "You're caught. Watch the others.") : L('Huli ka!', 'Caught!');
+    else if (this.me.state === 'ready') status = L('Handa...', 'Ready...');
+    else if (!onLangit) status = L('LUPA ka! Umakyat ka sa langit!', "You're on the ground! Climb up high!");
+    else if (this.me.perchLeft <= 0) status = L('Bawal tumambay! Lumipat ka!', 'No camping! Move to another spot!');
+    else status = L(`LANGIT ka. Lipat bago ${Math.ceil(this.me.perchLeft)}s`, `Safe up high. Move within ${Math.ceil(this.me.perchLeft)}s`);
     hud.setObjective(status);
-    let stat = `Tagal: ${Math.floor(this.me.survived)}s   Talon: ${this.me.hops}`;
+    let stat = L(`Tagal: ${Math.floor(this.me.survived)}s   Talon: ${this.me.hops}`, `Survived: ${Math.floor(this.me.survived)}s   Hops: ${this.me.hops}`);
     if (this.multiplayer && this.board.length > 1)
       stat += '   ' + this.board.slice(0, 4).map(([id, s, st]) => `${this.nameOf(id)} ${s}${st === 'out' ? 'x' : ''}`).join(' · ');
     hud.setStat(stat);
@@ -272,7 +281,7 @@ export class LangitLupa extends BaseGame {
       }
       case 'go':
         this.ctx.player.moveEnabled = true;
-        this.ctx.hud.toast('Takbo!', 'good', 800);
+        this.ctx.hud.toast(L('Takbo!', 'Go!'), 'good', 800);
         break;
       case 'caught':
         if (d.to === this.selfId) this.ctx.player.moveEnabled = this.multiplayer; // spectate by walking around in multiplayer
@@ -298,7 +307,7 @@ export class LangitLupa extends BaseGame {
       this.hostTayas(dt);
       const anyLeft = [...this.parts.values()].some((p) => p.state === 'play');
       if (!anyLeft || this.hostTime <= 0) {
-        if (this.hostTime <= 0) this.toast(null, 'Tapos na ang oras!', 'good', 1400);
+        if (this.hostTime <= 0) this.toast(null, L('Tapos na ang oras!', "Time's up!"), 'good', 1400);
         this.hostEnd();
       }
     }
@@ -336,7 +345,7 @@ export class LangitLupa extends BaseGame {
       p.perchT += dt;
       if (p.perchT > MAX_PERCH - 1.5 && !p.vulnerableWarned) {
         p.vulnerableWarned = true;
-        this.toast(p.id, 'Lipat na! Bawal tumambay!', 'bad', 1100);
+        this.toast(p.id, L('Lipat na! Bawal tumambay!', 'Move! No camping!'), 'bad', 1100);
         this.toAll({ k: 'sfx', name: 'tick', pos: null, to: p.id });
       }
     } else {
@@ -347,8 +356,8 @@ export class LangitLupa extends BaseGame {
     // outside the chalk boundary
     const outside = pos.x < BOUNDS.minX || pos.x > BOUNDS.maxX || pos.z < BOUNDS.minZ || pos.z > BOUNDS.maxZ;
     p.outsideT = outside ? p.outsideT + dt : 0;
-    if (outside && p.outsideT > 0 && p.outsideT - dt <= 0) this.toast(p.id, 'Bumalik ka sa loob ng guhit!', 'bad', 1000);
-    if (p.outsideT > OUT_GRACE) this.catchPart(p, 'Lumabas ka!');
+    if (outside && p.outsideT > 0 && p.outsideT - dt <= 0) this.toast(p.id, L('Bumalik ka sa loob ng guhit!', 'Get back inside the chalk line!'), 'bad', 1000);
+    if (p.outsideT > OUT_GRACE) this.catchPart(p, L('Lumabas ka!', 'Out of bounds!'));
   }
 
   private vulnerable(p: Part, pos: THREE.Vector3): boolean {
@@ -358,7 +367,7 @@ export class LangitLupa extends BaseGame {
   private catchPart(p: Part, msg: string): void {
     p.state = 'out';
     this.toast(p.id, msg, 'bad', 1500);
-    if (this.multiplayer) this.toast(null, `Huli si ${this.net!.nameOf(p.id)}!`, 'small', 1000);
+    if (this.multiplayer) this.toast(null, L(`Huli si ${this.net!.nameOf(p.id)}!`, `${this.net!.nameOf(p.id)} got caught!`), 'small', 1000);
     this.toAll({ k: 'sfx', name: 'tag', pos: null, to: p.id });
     this.toAll({ k: 'caught', to: p.id });
   }
@@ -394,7 +403,7 @@ export class LangitLupa extends BaseGame {
         target = prey.pos;
         speed = chaseSpeed;
         if (best < TAG_DIST) {
-          this.catchPart(prey.p, prey.pos.y <= SAFE_HEIGHT ? 'Huli ka sa lupa!' : 'Huli! Tumambay ka kasi.');
+          this.catchPart(prey.p, prey.pos.y <= SAFE_HEIGHT ? L('Huli ka sa lupa!', 'Caught on the ground!') : L('Huli! Tumambay ka kasi.', 'Caught! You stayed up there too long.'));
           t.kid.mode = 'cheer';
           continue;
         }
@@ -470,7 +479,7 @@ export class LangitLupa extends BaseGame {
         id: p.id,
         score: secs * 2 + p.hops + (full ? 40 : 0),
         won: full,
-        lines: [`Tumagal: ${secs}s / ${TIME}s`, `Lipat-langit: ${p.hops}`, full ? 'Hindi ka nahuli! +40' : 'Nahuli ka. Ulitin mo!'],
+        lines: [L(`Tumagal: ${secs}s / ${TIME}s`, `Survived: ${secs}s / ${TIME}s`), L(`Lipat-langit: ${p.hops}`, `Spot changes: ${p.hops}`), full ? L('Hindi ka nahuli! +40', 'Never caught! +40') : L('Nahuli ka. Ulitin mo!', 'You got caught. Try again!')],
       };
     });
     this.endWith(rows);
@@ -485,13 +494,13 @@ export class LangitLupa extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
       shareText: mine.won
-        ? `Hindi ako nahuli sa Langit-Lupa, ${mine.score} puntos sa Hari ng Kanto!`
-        : `Tumagal ako nang ${secs}s sa Langit-Lupa sa Hari ng Kanto!`,
+        ? L(`Hindi ako nahuli sa Langit-Lupa, ${mine.score} puntos sa Hari ng Kanto!`, `Nobody caught me in Langit-Lupa, ${mine.score} points on Hari ng Kanto!`)
+        : L(`Tumagal ako nang ${secs}s sa Langit-Lupa sa Hari ng Kanto!`, `I lasted ${secs}s in Langit-Lupa on Hari ng Kanto!`),
     });
   }
 }

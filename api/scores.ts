@@ -17,7 +17,7 @@ import { neon } from '@neondatabase/serverless';
 
 const MAX: Record<string, number> = {
   tumbangPreso: 300, sipa: 1500, patintero: 400, taguan: 300, langitLupa: 2000,
-  piko: 2000, luksongBaka: 4000, holen: 1000, pukpokPalayok: 2000,
+  piko: 2000, luksongBaka: 4000, holen: 1000, pukpokPalayok: 2000, sungka: 98, trumpo: 800,
 };
 
 const json = (body: unknown, status = 200, cache = 'no-store') =>

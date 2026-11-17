@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import { RAPIER } from '../core/physics';
 import type { GameData } from '../net/session';
@@ -34,7 +35,10 @@ const BASE = new THREE.Vector3(2.4, 0, -11.2); // counting wall (sari-sari side 
 const MIN_HIDERS = 4;
 const TIME = 90;
 const FIND_DIST = 2.3;
-const COUNT = ['Isa...', 'Dalawa...', 'Tatlo...', 'Apat...', 'Lima...', 'Anim...', 'Pito...', 'Walo...', 'Siyam...', 'Sampu!'];
+const COUNT_FIL = ['Isa...', 'Dalawa...', 'Tatlo...', 'Apat...', 'Lima...', 'Anim...', 'Pito...', 'Walo...', 'Siyam...', 'Sampu!'];
+const COUNT_EN = ['One...', 'Two...', 'Three...', 'Four...', 'Five...', 'Six...', 'Seven...', 'Eight...', 'Nine...', 'Ten! Ready or not!'];
+const COUNT = { get length() { return COUNT_FIL.length; } };
+const countWord = (i: number) => L(COUNT_FIL[i], COUNT_EN[i]);
 
 type Phase = 'count' | 'seek' | 'done';
 
@@ -53,7 +57,15 @@ export class Taguan extends BaseGame {
   readonly id = 'taguan';
   readonly name = 'Taguan';
   readonly implemented = true;
-  readonly where = 'sa eskinita sa likod ng waiting shed';
+  get where() { return L('sa eskinita sa likod ng waiting shed', 'in the alley behind the waiting shed'); }
+  get blurb() { return L('Taguan: magtago o maghanap', 'Hide and seek, barangay style'); }
+  get howTo() {
+    return [
+      L('Ang taya ay nagbibilang hanggang sampu habang nagtatago ang iba.', 'The seeker (the "taya") counts to ten while everyone else hides.'),
+      L('Bilang taya: tumingin nang diretso sa nagtatago para makita siya. Pakinggan ang hagikgik.', "As the seeker: look straight at a hider to find them. Listen for giggles; they're a giveaway."),
+      L('Bilang nagtatago: magtago sa likod ng mga bagay at huwag gumalaw. Yuyuko ka kapag tahimik.', 'As a hider: get behind crates, carts and walls and keep still. You crouch automatically.'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(-0.6, 0, -9.4),
     labelPos: new THREE.Vector3(0.2, 3.3, -11),
@@ -139,7 +151,7 @@ export class Taguan extends BaseGame {
     this.time = TIME;
     this.countI = -1;
     this.phase = 'count';
-    touch.setActionLabel('Hanap');
+    touch.setActionLabel(L('Hanap', 'Seek'));
     hud.setCrosshair(true);
 
     if (this.iSeek) {
@@ -147,7 +159,7 @@ export class Taguan extends BaseGame {
       player.moveEnabled = false;
       player.lookEnabled = false;
       overlays.fade(true, '');
-      hud.setObjective('Magbilang ka hanggang sampu...');
+      hud.setObjective(L('Magbilang ka hanggang sampu...', 'Count to ten...'));
       avatars.hiddenTags = new Set(this.humanHiders);
     } else {
       const i = this.humanHiders.indexOf(this.selfId);
@@ -155,8 +167,8 @@ export class Taguan extends BaseGame {
       player.moveEnabled = true;
       player.lookEnabled = true;
       overlays.fade(false);
-      hud.setObjective(`Magtago ka! Si ${this.nameOf(this.seeker)} ang taya.`);
-      hud.toast('Takbo! Magtago!', 'good', 1400);
+      hud.setObjective(L(`Magtago ka! Si ${this.nameOf(this.seeker)} ang taya.`, `Hide! ${this.nameOf(this.seeker)} is the seeker.`));
+      hud.toast(L('Takbo! Magtago!', 'Run! Hide!'), 'good', 1400);
       avatars.hiddenTags = new Set();
     }
 
@@ -211,7 +223,7 @@ export class Taguan extends BaseGame {
     }
 
     if (this.phase === 'count') {
-      if (!this.iSeek) hud.setBig(this.countI >= 0 ? COUNT[this.countI] : null);
+      if (!this.iSeek) hud.setBig(this.countI >= 0 ? countWord(this.countI) : null);
       return;
     }
 
@@ -221,7 +233,7 @@ export class Taguan extends BaseGame {
 
     if (!this.iSeek) {
       const me = this.found.has(this.selfId);
-      hud.setStat(`${me ? 'Nakita ka na' : 'Hindi ka pa nakikita'}   Nakita: ${this.found.size}/${this.totalHiders}`);
+      hud.setStat(`${me ? L('Nakita ka na', "You've been found") : L('Hindi ka pa nakikita', 'Still hidden')}   ${L('Nakita', 'Found')}: ${this.found.size}/${this.totalHiders}`);
       return;
     }
 
@@ -259,8 +271,8 @@ export class Taguan extends BaseGame {
         }
       }
     }
-    const warmth = nearest < 4 ? 'Mainit na!' : nearest < 9 ? 'Malapit-lapit...' : nearest < Infinity ? 'Malamig pa.' : '';
-    hud.setStat(`Nakita: ${this.found.size}/${this.totalHiders}   ${warmth}`);
+    const warmth = nearest < 4 ? L('Mainit na!', "Hot! They're close!") : nearest < 9 ? L('Malapit-lapit...', 'Getting warmer...') : nearest < Infinity ? L('Malamig pa.', 'Cold.') : '';
+    hud.setStat(`${L('Nakita', 'Found')}: ${this.found.size}/${this.totalHiders}   ${warmth}`);
   }
 
   private clearLine(from: THREE.Vector3, dir: THREE.Vector3, len: number): boolean {
@@ -277,7 +289,7 @@ export class Taguan extends BaseGame {
       case 'count': {
         this.countI = Number(d.i);
         audio.play('tick');
-        if (this.iSeek) overlays.fade(true, COUNT[this.countI]);
+        if (this.iSeek) overlays.fade(true, countWord(this.countI));
         break;
       }
       case 'seek':
@@ -287,11 +299,11 @@ export class Taguan extends BaseGame {
           overlays.fade(false);
           player.moveEnabled = true;
           player.lookEnabled = true;
-          hud.toast('Handa na! Hanap!', 'good', 1300);
-          hud.setObjective(`Hanapin ang ${this.totalHiders} na nagtatago! Pakinggan ang mga hagikgik.`);
+          hud.toast(L('Handa na! Hanap!', 'Ready or not, here I come!'), 'good', 1300);
+          hud.setObjective(L(`Hanapin ang ${this.totalHiders} na nagtatago! Pakinggan ang mga hagikgik.`, `Find all ${this.totalHiders} hiders! Listen for the giggles.`));
         } else {
-          hud.toast('Hahanap na siya!', 'bad', 1300);
-          hud.setObjective('Huwag kang magpakita! Tumahimik ka.');
+          hud.toast(L('Hahanap na siya!', 'The seeker is coming!'), 'bad', 1300);
+          hud.setObjective(L('Huwag kang magpakita! Tumahimik ka.', 'Stay out of sight and keep still.'));
         }
         break;
       case 's':
@@ -310,11 +322,11 @@ export class Taguan extends BaseGame {
         }
         if (this.iSeek) {
           audio.play('pickup');
-          hud.toast(`Nakita kita! ${this.found.size}/${this.totalHiders}`, 'good', 1200);
+          hud.toast(L(`Nakita kita! ${this.found.size}/${this.totalHiders}`, `Found you! ${this.found.size}/${this.totalHiders}`), 'good', 1200);
         } else if (id === this.selfId) {
-          hud.toast('Nakita ka!', 'bad', 1500);
-          hud.setObjective('Nakita ka na. Panoorin ang iba.');
-        } else if (this.multiplayer && !h) hud.toast(`Nakita si ${this.nameOf(id)}!`, 'small', 1000);
+          hud.toast(L('Nakita ka!', "You've been found!"), 'bad', 1500);
+          hud.setObjective(L('Nakita ka na. Panoorin ang iba.', "You've been found. Watch the others."));
+        } else if (this.multiplayer && !h) hud.toast(L(`Nakita si ${this.nameOf(id)}!`, `${this.nameOf(id)} was found!`), 'small', 1000);
         break;
       }
     }
@@ -337,7 +349,7 @@ export class Taguan extends BaseGame {
     // seeker left the lobby: end; hider left: drop them
     const roster = this.roster();
     if (!roster.includes(this.seeker) && this.hostPhase !== 'done') {
-      this.toast(null, 'Umalis ang taya. Tapos na ang laro.', 'bad', 1500);
+      this.toast(null, L('Umalis ang taya. Tapos na ang laro.', 'The seeker left. Game over.'), 'bad', 1500);
       this.hostEnd();
       return;
     }
@@ -364,7 +376,7 @@ export class Taguan extends BaseGame {
         this.toAll({ k: 's', tm: Math.max(0, Math.round(this.hostT * 10) / 10) });
       }
       if (this.hostT <= 0) {
-        this.toast(null, 'Ubos ang oras!', 'bad', 1400);
+        this.toast(null, L('Ubos ang oras!', "Time's up!"), 'bad', 1400);
         this.hostEnd();
       }
     }
@@ -381,7 +393,7 @@ export class Taguan extends BaseGame {
       id: this.seeker,
       score: sk,
       won: all,
-      lines: ['Ikaw ang taya', `Nakita: ${this.foundAt.size}/${this.totalHiders}`, all ? `Oras na natira: ${timeLeft}s` : 'May nagtatago pa!'],
+      lines: [L('Ikaw ang taya', 'You were the seeker'), L(`Nakita: ${this.foundAt.size}/${this.totalHiders}`, `Found: ${this.foundAt.size}/${this.totalHiders}`), all ? L(`Oras na natira: ${timeLeft}s`, `Time left: ${timeLeft}s`) : L('May nagtatago pa!', 'Someone is still hiding!')],
     });
     for (const id of this.humanHiders) {
       const at = this.foundAt.get(id);
@@ -389,7 +401,7 @@ export class Taguan extends BaseGame {
         id,
         score: at === undefined ? 100 : Math.floor(at),
         won: at === undefined,
-        lines: ['Nagtago ka', at === undefined ? 'Hindi ka nakita! +100' : `Nakita ka pagkatapos ng ${Math.floor(at)}s`],
+        lines: [L('Nagtago ka', 'You were hiding'), at === undefined ? L('Hindi ka nakita! +100', 'Never found! +100') : L(`Nakita ka pagkatapos ng ${Math.floor(at)}s`, `Found after ${Math.floor(at)}s`)],
       });
     }
     this.endWith(rows);
@@ -404,16 +416,16 @@ export class Taguan extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
       shareText: seeker
-        ? `${this.found.size} ang nahanap ko sa Taguan, ${mine.score} puntos sa Hari ng Kanto!`
+        ? L(`${this.found.size} ang nahanap ko sa Taguan, ${mine.score} puntos sa Hari ng Kanto!`, `I found ${this.found.size} hiders in Taguan, ${mine.score} points on Hari ng Kanto!`)
         : won
-          ? 'Hindi ako nahanap sa Taguan sa Hari ng Kanto!'
-          : `Nakapagtago ako nang ${mine.score}s sa Taguan sa Hari ng Kanto!`,
-      feats: seeker ? (mine.won ? ['foundAll'] : []) : mine.lines.some((l) => l.startsWith('Hindi ka nakita')) ? ['unseen'] : [],
+          ? L('Hindi ako nahanap sa Taguan sa Hari ng Kanto!', 'Nobody found me in Taguan on Hari ng Kanto!')
+          : L(`Nakapagtago ako nang ${mine.score}s sa Taguan sa Hari ng Kanto!`, `I stayed hidden for ${mine.score}s in Taguan on Hari ng Kanto!`),
+      feats: seeker ? (mine.won ? ['foundAll'] : []) : mine.lines.some((l) => l.startsWith('Hindi ka nakita') || l.startsWith('Never found')) ? ['unseen'] : [],
     });
   }
 }

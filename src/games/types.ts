@@ -44,6 +44,11 @@ export interface GameContext {
   avatars: Avatars;
   isTouch: () => boolean;
   groundAt: (x: number, z: number) => number;
+  /**
+   * Board games (Sungka): release the mouse so the player can click the
+   * board, and hide the touch joystick. Turn it off again in stop().
+   */
+  freePointer: (on: boolean) => void;
   /** Call once when the game is over. The manager shows the end card. */
   finish: (r: GameResult) => void;
 }

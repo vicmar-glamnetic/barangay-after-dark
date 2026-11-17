@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import type { GameData } from '../net/session';
 import { BaseGame, type EndRow } from './baseGame';
@@ -31,7 +32,15 @@ export class Sipa extends BaseGame {
   readonly id = 'sipa';
   readonly name = 'Sipa';
   readonly implemented = true;
-  readonly where = 'sa harap ng sari-sari store';
+  get where() { return L('sa harap ng sari-sari store', 'in front of the sari-sari store'); }
+  get blurb() { return L('Sipain pataas ang sipa nang hindi nahuhulog', 'Keep a feathered washer in the air with your foot'); }
+  get howTo() {
+    return [
+      L('Ang sipa ay maliit na pabigat na may palamuti. Bawal itong mahulog sa lupa.', 'The "sipa" is a small weighted washer with a tassel. It must never touch the ground.'),
+      L('Kapag bumaba ito sa bilog, pindutin para sipain ulit.', 'When it drops into the ring, press to kick it back up.'),
+      L('Sa gitna ng bilog = Perfect. Ilang sipa ang kaya mong sunod-sunod?', 'Kick it dead center for a Perfect. How many in a row can you do?'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: SPOT.clone(),
     labelPos: new THREE.Vector3(6, 3.6, -6.4),
@@ -124,10 +133,10 @@ export class Sipa extends BaseGame {
     this.thud = false;
     this.sipa.visible = this.ring.visible = this.approach.visible = true;
     this.removeShadow = blobs.add(this.sipa, 0.25);
-    hud.setObjective(isTouch() ? 'I-tap kapag pumasok sa bilog ang sipa!' : 'Click o Space kapag pumasok sa bilog ang sipa!');
+    hud.setObjective(isTouch() ? L('I-tap kapag pumasok sa bilog ang sipa!', 'Tap when the sipa drops into the ring!') : L('Click o Space kapag pumasok sa bilog ang sipa!', 'Click or press Space when the sipa drops into the ring!'));
     hud.setBig('0');
     hud.setCrosshair(false);
-    touch.setActionLabel('Sipa');
+    touch.setActionLabel(L('Sipa', 'Kick'));
     touch.setJumpVisible(false);
     this.group.kids.forEach((k) => {
       k.mode = 'idle';
@@ -147,7 +156,7 @@ export class Sipa extends BaseGame {
     hand.showLeg(false);
     hud.clearGameWidgets();
     hud.setCrosshair(true);
-    touch.setActionLabel('Bato');
+    touch.setActionLabel(L('Bato', 'Throw'));
     touch.setJumpVisible(true);
   }
 
@@ -164,7 +173,7 @@ export class Sipa extends BaseGame {
         if (this.introT <= 0) {
           this.phase = 'play';
           this.vy = 2.2;
-          hud.toast('Sipa!', 'small', 700);
+          hud.toast(L('Sipa!', 'Kick!'), 'small', 700);
         }
         break;
 
@@ -185,7 +194,7 @@ export class Sipa extends BaseGame {
         if (d < -WINDOW - 0.02) {
           this.phase = 'drop';
           this.dropT = 1.3;
-          hud.toast('Nahulog!', 'bad', 1200);
+          hud.toast(L('Nahulog!', 'Dropped it!'), 'bad', 1200);
           this.group.kids.forEach((k) => (k.mode = 'wave'));
         }
         break;
@@ -202,7 +211,7 @@ export class Sipa extends BaseGame {
         if (this.dropT <= 0 && !this.reported) {
           this.reported = true;
           this.report(true);
-          if (this.multiplayer) hud.setObjective('Hinihintay ang iba...');
+          if (this.multiplayer) hud.setObjective(L('Hinihintay ang iba...', 'Waiting for the others...'));
         }
         break;
 
@@ -231,7 +240,7 @@ export class Sipa extends BaseGame {
     hud.setBig(String(this.streak));
     this.report(false);
     if (this.streak % 5 === 0) {
-      hud.toast(`${this.streak}! Galing!`, 'good', 900);
+      hud.toast(L(`${this.streak}! Galing!`, `${this.streak}! Nice!`), 'good', 900);
       audio.play('cheer');
       this.group.kids.forEach((k) => (k.mode = 'cheer'));
       this.cheerT = 1.2;
@@ -291,11 +300,11 @@ export class Sipa extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: s,
-      scoreLabel: 'sunod-sunod na sipa',
+      scoreLabel: L('sunod-sunod na sipa', 'kicks in a row'),
       points: s * 2 + this.perfects,
       won,
-      lines: [...mine.lines, ...(ranking.length ? ranking : [s >= 10 ? 'Pang-barangay champion!' : 'Kaya mo pa yan! Abutin ang 10.'])],
-      shareText: `Naka-${s} sipa ako sa Hari ng Kanto!`,
+      lines: [...mine.lines, ...(ranking.length ? ranking : [s >= 10 ? L('Pang-barangay champion!', 'Barangay champion material!') : L('Kaya mo pa yan! Abutin ang 10.', 'You can do better! Go for 10.')])],
+      shareText: L(`Naka-${s} sipa ako sa Hari ng Kanto!`, `I kicked the sipa ${s} times in a row on Hari ng Kanto!`),
     });
   }
 }

@@ -28,6 +28,7 @@ import { Traffic } from './world/traffic';
 import { FONT } from './world/textures';
 import { NightEvents } from './world/nightEvents';
 import { escapeInAppBrowser } from './ui/inAppEscape';
+import { L, onLang } from './core/i18n';
 
 type AppState = 'loading' | 'title' | 'play';
 const FAR_AWAY = new THREE.Vector3(0, 50, 0);
@@ -62,6 +63,8 @@ class App {
   private traffic!: Traffic;
   private events!: NightEvents;
   private eventChipT = 0;
+  /** A board game has the mouse (no pointer lock, no joystick). */
+  private pointerFree = false;
   private perf = new PerfGovernor(
     (fx) => this.applyPerf(fx),
     () => this.r.gpuMs >= 0 && this.r.gpuMs < 7 && this.loop.cpuMs < 7,
@@ -116,10 +119,10 @@ class App {
     this.input.onModeChange((t) => this.setTouchMode(t));
     this.input.onLockChange((locked) => {
       // Esc releases pointer lock in the browser: treat it as pause.
-      if (!locked && this.state === 'play' && !this.paused && !this.menus.isOpen && !this.input.usingTouch) this.pause();
+      if (!locked && this.state === 'play' && !this.paused && !this.menus.isOpen && !this.input.usingTouch && !this.pointerFree) this.pause();
     });
     this.canvas.addEventListener('click', () => {
-      if (this.state === 'play' && !this.paused && !this.menus.isOpen) this.input.requestLock();
+      if (this.state === 'play' && !this.paused && !this.menus.isOpen && !this.pointerFree) this.input.requestLock();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -129,13 +132,17 @@ class App {
     });
     this.preventBrowserGestures();
     escapeInAppBrowser(this.ui);
+    onLang(() => {
+      this.menus.refreshTitle();
+      this.games?.onLanguage();
+    });
     // keep the game fullscreen: any tap while playing re-enters it if the browser dropped out
     document.addEventListener('click', () => {
       if (this.state === 'play') this.goFullscreen();
     }, true);
     this.boot().catch((e) => {
       console.error(e);
-      document.querySelector('.start-btn')!.textContent = 'May error. I-refresh ang page.';
+      document.querySelector('.start-btn')!.textContent = L('May error. I-refresh ang page.', 'Something went wrong. Please refresh the page.');
     });
   }
 
@@ -164,7 +171,7 @@ class App {
       if (ev) {
         this.hud.toast(ev.start, 'good', 2600);
         this.audio.play(ev.id === 'sorbetero' ? 'bell' : 'perfect');
-      } else this.hud.toast('Tapos na ang event. Abangan ang susunod!', 'small', 1800);
+      } else this.hud.toast(L('Tapos na ang event. Abangan ang susunod!', 'Event over. Watch for the next one!'), 'small', 1800);
     };
     this.perf.setEnabled(this.save.data.settings.autoFps);
     this.games = new GameManager(
@@ -183,6 +190,16 @@ class App {
         avatars: this.avatars,
         isTouch: () => this.input.usingTouch,
         groundAt,
+        freePointer: (on) => {
+          this.pointerFree = on;
+          if (on) {
+            this.input.exitLock();
+            this.touch.setVisible(false);
+          } else if (!this.menus.isOpen) {
+            this.touch.setVisible(this.input.usingTouch);
+            this.input.requestLock();
+          }
+        },
       },
       this.save,
       this.menus,
@@ -197,8 +214,10 @@ class App {
           } else {
             this.paused = false;
             this.input.enabled = true;
-            this.touch.setVisible(this.input.usingTouch);
-            this.input.requestLock();
+            if (!this.pointerFree) {
+              this.touch.setVisible(this.input.usingTouch);
+              this.input.requestLock();
+            }
           }
         },
       },
@@ -231,10 +250,10 @@ class App {
     const sp = this.world.spawn;
     this.player.teleport(sp.pos.x, sp.pos.y, sp.pos.z, sp.yaw);
     this.hud.setObjective(this.games.hubObjective());
-    this.hud.toast(this.input.usingTouch ? 'Joystick para lumakad, drag para tumingin' : 'WASD para lumakad, mouse para tumingin', 'small', 3200);
+    this.hud.toast(this.input.usingTouch ? L('Joystick para lumakad, drag para tumingin', 'Joystick to walk, drag to look') : L('WASD para lumakad, mouse para tumingin', 'WASD to walk, mouse to look'), 'small', 3200);
     // iPhone Safari has no fullscreen API: the home-screen app is the only way
     if (device.isIOS && !device.isStandalone && !device.inApp && !document.fullscreenEnabled)
-      window.setTimeout(() => this.hud.toast('Para full screen: Share → Add to Home Screen', 'small', 4000), 3600);
+      window.setTimeout(() => this.hud.toast(L('Para full screen: Share → Add to Home Screen', 'For full screen: Share → Add to Home Screen'), 'small', 4000), 3600);
     this.input.requestLock();
   }
 
@@ -263,6 +282,7 @@ class App {
     this.menus.close();
     this.paused = false;
     this.input.enabled = true;
+    if (this.pointerFree) return;
     this.touch.setVisible(this.input.usingTouch);
     this.input.requestLock();
   }
@@ -399,7 +419,7 @@ class App {
       this.avatars.setVisible(!!s && this.games.networked);
       this.avatars.update(dt, t, s);
       this.hand.update(dt, this.player.speed);
-      this.hud.setClickHint(controls && !this.input.usingTouch && !this.input.locked);
+      this.hud.setClickHint(controls && !this.input.usingTouch && !this.input.locked && !this.pointerFree);
       this.audio.updateListener(cam);
     }
 

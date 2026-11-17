@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import type { GameData } from '../net/session';
 import { Kid } from '../world/npcs';
@@ -67,7 +68,15 @@ export class Patintero extends BaseGame {
   readonly id = 'patintero';
   readonly name = 'Patintero';
   readonly implemented = true;
-  readonly where = 'sa covered court';
+  get where() { return L('sa covered court', 'at the covered basketball court'); }
+  get blurb() { return L('Tumawid sa mga linya nang hindi natataya', 'Cross the chalk grid without getting tagged'); }
+  get howTo() {
+    return [
+      L('Tumakbo hanggang dulo ng grid at bumalik sa simula.', 'Run to the far end of the chalk grid and back to the start.'),
+      L('Bawat linya ay may bantay. Pwede ka lang nilang tayain habang nasa linya ka nila.', 'Each line has a guard who slides along it. They can only tag you while you are ON their line.'),
+      L('Huwag lalabas sa gilid ng grid. 3 buhay, 90 segundo.', "Don't step outside the grid. You have 3 lives and 90 seconds."),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(5.2, 0, 9.6),
     labelPos: new THREE.Vector3(8.5, 3.3, 13),
@@ -138,7 +147,7 @@ export class Patintero extends BaseGame {
     this.me = { state: 'ready', leg: 'out', progress: 0, lives: LIVES, score: 0 };
     this.time = TIME;
     this.board = [];
-    touch.setActionLabel('Takbo');
+    touch.setActionLabel(L('Takbo', 'Run'));
     hud.setCrosshair(true);
     hud.toast('Patintero!', 'small', 1200);
     this.spawnSelf('out');
@@ -208,16 +217,16 @@ export class Patintero extends BaseGame {
     const { hud } = this.ctx;
     const m = this.me;
     const hearts = '♥'.repeat(Math.max(0, m.lives)) + '♡'.repeat(Math.max(0, LIVES - m.lives));
-    let stat = `${hearts}   ${m.leg === 'out' ? 'Papunta' : 'Pabalik'} ${m.progress}/${LINES_X.length}   Puntos: ${m.score}`;
+    let stat = `${hearts}   ${m.leg === 'out' ? L('Papunta', 'Going') : L('Pabalik', 'Returning')} ${m.progress}/${LINES_X.length}   ${L('Puntos', 'Score')}: ${m.score}`;
     if (this.multiplayer && this.board.length > 1) stat += '   ' + this.board.slice(0, 4).map(([id, s]) => `${this.nameOf(id)} ${s}`).join(' · ');
     hud.setStat(stat);
     hud.setTimer(String(Math.max(0, Math.ceil(this.time))));
     const obj: Record<RState, string> = {
-      ready: 'Handa...',
-      run: m.leg === 'out' ? 'Tumawid hanggang dulo! Iwasan ang mga taya.' : 'Balik na sa simula!',
-      tagged: 'Taya ka!',
-      won: this.multiplayer ? 'Nakabalik ka! Hintayin ang iba.' : 'Nakabalik ka!',
-      out: this.multiplayer ? 'Ubos na ang buhay mo. Panoorin ang iba.' : 'Ubos na ang buhay mo.',
+      ready: L('Handa...', 'Ready...'),
+      run: m.leg === 'out' ? L('Tumawid hanggang dulo! Iwasan ang mga taya.', 'Cross to the far end! Dodge the guards.') : L('Balik na sa simula!', 'Now head back to the start!'),
+      tagged: L('Taya ka!', 'Tagged!'),
+      won: this.multiplayer ? L('Nakabalik ka! Hintayin ang iba.', 'You made it back! Wait for the others.') : L('Nakabalik ka!', 'You made it back!'),
+      out: this.multiplayer ? L('Ubos na ang buhay mo. Panoorin ang iba.', 'Out of lives. Watch the others.') : L('Ubos na ang buhay mo.', 'Out of lives.'),
     };
     hud.setObjective(obj[m.state]);
   }
@@ -245,7 +254,7 @@ export class Patintero extends BaseGame {
       case 'go':
         if (d.to === this.selfId) {
           this.ctx.player.moveEnabled = true;
-          this.ctx.hud.toast('Takbo!', 'good', 700);
+          this.ctx.hud.toast(L('Takbo!', 'Go!'), 'good', 700);
         }
         break;
       case 'freeze':
@@ -253,7 +262,7 @@ export class Patintero extends BaseGame {
         break;
       case 'leg':
         if (d.to === this.selfId) {
-          this.ctx.hud.toast('Balik na!', 'good', 1100);
+          this.ctx.hud.toast(L('Balik na!', 'Now come back!'), 'good', 1100);
           this.ctx.audio.play('cheer');
         }
         break;
@@ -271,7 +280,7 @@ export class Patintero extends BaseGame {
       for (const r of this.runners.values()) this.hostRunner(r, dt);
       const allDone = [...this.runners.values()].every((r) => r.state === 'won' || r.state === 'out');
       if (allDone || this.hostTime <= 0) {
-        if (!allDone) this.toast(null, 'Ubos ang oras!', 'bad', 1400);
+        if (!allDone) this.toast(null, L('Ubos ang oras!', "Time's up!"), 'bad', 1400);
         this.hostEnd();
       }
     }
@@ -322,7 +331,7 @@ export class Patintero extends BaseGame {
     // running: out of the grid?
     const inLength = p.x > GRID.minX - 0.2 && p.x < GRID.maxX + 0.2;
     if (inLength && (p.z < GRID.minZ - 0.3 || p.z > GRID.maxZ + 0.3)) {
-      this.hostLoseLife(r, 'Labas ka!');
+      this.hostLoseLife(r, L('Labas ka!', 'Out of bounds!'));
       return;
     }
     // crossings
@@ -343,13 +352,13 @@ export class Patintero extends BaseGame {
         r.leg = 'back';
         r.progress = 0;
         this.toAll({ k: 'leg', to: r.id });
-        if (this.multiplayer) this.toast(null, `${this.net!.nameOf(r.id)}: pabalik na!`, 'small', 900);
+        if (this.multiplayer) this.toast(null, L(`${this.net!.nameOf(r.id)}: pabalik na!`, `${this.net!.nameOf(r.id)} is heading back!`), 'small', 900);
       } else if (r.leg === 'back' && p.x < START_X + 0.8) {
         r.state = 'won';
         r.timeLeft = Math.max(0, this.hostTime);
         r.score += 20 + r.lives * 10 + Math.floor(r.timeLeft);
-        this.toast(r.id, 'Nakabalik ka!', 'good', 1400);
-        if (this.multiplayer) this.toast(null, `Nakabalik si ${this.net!.nameOf(r.id)}!`, 'small', 1000);
+        this.toast(r.id, L('Nakabalik ka!', 'You made it back!'), 'good', 1400);
+        if (this.multiplayer) this.toast(null, L(`Nakabalik si ${this.net!.nameOf(r.id)}!`, `${this.net!.nameOf(r.id)} made it back!`), 'small', 1000);
         this.sfx('cheer');
         this.toAll({ k: 'freeze', to: r.id });
         return;
@@ -362,7 +371,7 @@ export class Patintero extends BaseGame {
           ? Math.abs(p.x - LINES_X[tg.line]) < LINE_HIT && Math.abs(p.z - tg.pos) < TAG_REACH + 0.2
           : Math.abs(p.z - GRID.midZ) < LINE_HIT && Math.abs(p.x - tg.pos) < TAG_REACH + 0.2;
       if (hit) {
-        this.hostLoseLife(r, 'Taya ka!');
+        this.hostLoseLife(r, L('Taya ka!', 'Tagged!'));
         return;
       }
     }
@@ -373,7 +382,7 @@ export class Patintero extends BaseGame {
     r.state = 'tagged';
     r.timer = 1.4;
     this.toAll({ k: 'freeze', to: r.id });
-    this.toast(r.id, r.lives > 0 ? `${msg} -1 buhay` : msg, 'bad', 1300);
+    this.toast(r.id, r.lives > 0 ? `${msg} ${L('-1 buhay', '-1 life')}` : msg, 'bad', 1300);
     this.toAll({ k: 'sfx', name: 'tag', pos: null, to: r.id });
     if (this.multiplayer) this.toast(null, `${this.net!.nameOf(r.id)}: ${msg}`, 'small', 900);
   }
@@ -428,9 +437,9 @@ export class Patintero extends BaseGame {
         score: r.score,
         won: r.state === 'won',
         lines: [
-          `Linyang natawid: ${lines}/${LINES_X.length * 2}`,
-          `Buhay na natira: ${Math.max(0, r.lives)}/${LIVES}`,
-          r.state === 'won' ? `Oras na natira: ${Math.floor(r.timeLeft)}s` : 'Kaya mo yan, ulitin mo!',
+          L(`Linyang natawid: ${lines}/${LINES_X.length * 2}`, `Lines crossed: ${lines}/${LINES_X.length * 2}`),
+          L(`Buhay na natira: ${Math.max(0, r.lives)}/${LIVES}`, `Lives left: ${Math.max(0, r.lives)}/${LIVES}`),
+          r.state === 'won' ? L(`Oras na natira: ${Math.floor(r.timeLeft)}s`, `Time left: ${Math.floor(r.timeLeft)}s`) : L('Kaya mo yan, ulitin mo!', 'You can do it, try again!'),
         ],
       };
     });
@@ -445,14 +454,14 @@ export class Patintero extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
       shareText: mine.won
-        ? `Nakatawid ako pabalik sa Patintero, ${mine.score} puntos sa Hari ng Kanto!`
-        : `Naka-${crossed} linya ako sa Patintero sa Hari ng Kanto!`,
-      feats: mine.won && mine.lines.includes(`Buhay na natira: ${LIVES}/${LIVES}`) ? ['flawless'] : [],
+        ? L(`Nakatawid ako pabalik sa Patintero, ${mine.score} puntos sa Hari ng Kanto!`, `I made it there and back in Patintero, ${mine.score} points on Hari ng Kanto!`)
+        : L(`Naka-${crossed} linya ako sa Patintero sa Hari ng Kanto!`, `I crossed ${crossed} lines in Patintero on Hari ng Kanto!`),
+      feats: mine.won && mine.lines.some((l) => l === `Buhay na natira: ${LIVES}/${LIVES}` || l === `Lives left: ${LIVES}/${LIVES}`) ? ['flawless'] : [],
     });
   }
 }

@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import { el } from './dom';
 
 /**
@@ -14,8 +15,8 @@ export class Overlays {
     'div.rotate',
     {},
     el('div.phone'),
-    el('h3', { text: 'Ikot mo ang phone mo' }),
-    el('p', { text: 'Mas masaya maglaro nang naka-landscape.' }),
+    el('h3', { text: L('Ikot mo ang phone mo', 'Turn your phone sideways') }),
+    el('p', { text: L('Mas masaya maglaro nang naka-landscape.', 'The game plays best in landscape.') }),
   );
 
   constructor(parent: HTMLElement) {

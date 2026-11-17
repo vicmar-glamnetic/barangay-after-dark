@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 
 /**
@@ -37,7 +38,7 @@ export function saveFace(face: string | null): void {
 export function processFaceFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
-      reject(new Error('Larawan lang ang pwede.'));
+      reject(new Error(L('Larawan lang ang pwede.', 'Only pictures are allowed.')));
       return;
     }
     const url = URL.createObjectURL(file);
@@ -46,7 +47,7 @@ export function processFaceFile(file: File): Promise<string> {
       URL.revokeObjectURL(url);
       const s = Math.min(img.naturalWidth, img.naturalHeight);
       if (!s) {
-        reject(new Error('Hindi mabasa ang larawan.'));
+        reject(new Error(L('Hindi mabasa ang larawan.', "Couldn't read that picture.")));
         return;
       }
       const c = document.createElement('canvas');
@@ -61,11 +62,11 @@ export function processFaceFile(file: File): Promise<string> {
           return;
         }
       }
-      reject(new Error('Masyadong malaki ang larawan.'));
+      reject(new Error(L('Masyadong malaki ang larawan.', 'That picture is too large.')));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('Hindi mabasa ang larawan. Subukan ang JPG o PNG.'));
+      reject(new Error(L('Hindi mabasa ang larawan. Subukan ang JPG o PNG.', "Couldn't read that picture. Try a JPG or PNG.")));
     };
     img.src = url;
   });

@@ -4,6 +4,8 @@
  * and missing a day only resets the streak (no punishment beyond that).
  */
 
+import { L } from './i18n';
+
 /** Score needed for 1, 2, 3 stars in each game. */
 export const STAR_THRESHOLDS: Record<string, [number, number, number]> = {
   tumbangPreso: [10, 25, 40],
@@ -15,6 +17,8 @@ export const STAR_THRESHOLDS: Record<string, [number, number, number]> = {
   luksongBaka: [30, 100, 200],
   holen: [20, 40, 70],
   pukpokPalayok: [40, 120, 200],
+  sungka: [35, 50, 62],
+  trumpo: [60, 130, 220],
 };
 
 export function starsFor(gameId: string, score: number): number {
@@ -35,18 +39,21 @@ export const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
 export interface Rank {
   at: number;
-  name: string;
+  /** Name in the current language. */
+  readonly name: string;
 }
 
+const rank = (at: number, fil: string, en: string): Rank => ({ at, get name() { return L(fil, en); } });
+
 export const RANKS: Rank[] = [
-  { at: 0, name: 'Bagong Salta' },
-  { at: 100, name: 'Batang Kanto' },
-  { at: 300, name: 'Tambay' },
-  { at: 700, name: 'Laro King' },
-  { at: 1500, name: 'Idol ng Barangay' },
-  { at: 3000, name: 'Alamat ng Kanto' },
-  { at: 6000, name: 'Barangay Legend' },
-  { at: 10000, name: 'Hari ng Kanto' },
+  rank(0, 'Bagong Salta', 'New Kid on the Block'),
+  rank(100, 'Batang Kanto', 'Street Kid'),
+  rank(300, 'Tambay', 'Corner Regular'),
+  rank(700, 'Laro King', 'Game King'),
+  rank(1500, 'Idol ng Barangay', 'Neighborhood Idol'),
+  rank(3000, 'Alamat ng Kanto', 'Street Legend'),
+  rank(6000, 'Barangay Legend', 'Barangay Legend'),
+  rank(10000, 'Hari ng Kanto', 'Hari ng Kanto (King of the Street)'),
 ];
 
 export function rankIndex(points: number): number {
@@ -63,17 +70,17 @@ export function nextRank(points: number): Rank | null {
   return RANKS[rankIndex(points) + 1] ?? null;
 }
 
-/** Tsinelas colors: [strap, top]. Each unlocks at a rank index. */
-export const SLIPPERS: { name: string; strap: number; top: number; rank: number }[] = [
-  { name: 'Asul', strap: 0x1f6fb2, top: 0x2f86d6, rank: 0 },
-  { name: 'Pula', strap: 0xc62828, top: 0xe85d5d, rank: 1 },
-  { name: 'Berde', strap: 0x2a9d8f, top: 0x57cc99, rank: 2 },
-  { name: 'Dilaw', strap: 0xf2c230, top: 0xffe066, rank: 3 },
-  { name: 'Lila', strap: 0x7b2cbf, top: 0xc77dff, rank: 4 },
-  { name: 'Ginto', strap: 0xb8860b, top: 0xffd700, rank: 5 },
-  { name: 'Bahaghari', strap: 0xff4d6d, top: 0x4cc9f0, rank: 6 },
-  { name: 'Korona', strap: 0x6a0dad, top: 0xffd700, rank: 7 },
-];
+/** Tsinelas colors: [strap, top]. Each unlocks at a rank index. `id` is the stable Filipino name. */
+export const SLIPPERS: { id: string; readonly name: string; strap: number; top: number; rank: number }[] = [
+  ['Asul', 'Blue', 0x1f6fb2, 0x2f86d6, 0],
+  ['Pula', 'Red', 0xc62828, 0xe85d5d, 1],
+  ['Berde', 'Green', 0x2a9d8f, 0x57cc99, 2],
+  ['Dilaw', 'Yellow', 0xf2c230, 0xffe066, 3],
+  ['Lila', 'Purple', 0x7b2cbf, 0xc77dff, 4],
+  ['Ginto', 'Gold', 0xb8860b, 0xffd700, 5],
+  ['Bahaghari', 'Rainbow', 0xff4d6d, 0x4cc9f0, 6],
+  ['Korona', 'Crown', 0x6a0dad, 0xffd700, 7],
+].map(([fil, en, strap, top, rank]) => ({ id: fil as string, get name() { return L(fil as string, en as string); }, strap: strap as number, top: top as number, rank: rank as number }));
 
 /** Local calendar day, e.g. "2026-11-17". */
 export function today(d = new Date()): string {

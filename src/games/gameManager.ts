@@ -4,12 +4,13 @@ import {
   SLIPPERS, dailyChallenge, dailyReward, nextRank, nextStarGap, rankFor, rankIndex, starText, starsFor, today, yesterday,
 } from '../core/progression';
 import {
-  QUEST_TROPA, RIVALS, RIVAL_MAX, advanceQuests, checkBadges, dailyQuests, eventMult, nameTagSub, pushRecord, rivalReward, rivalTarget, rollQuests,
+  QUEST_TROPA, TREAT_MULT, RIVALS, RIVAL_MAX, advanceQuests, checkBadges, dailyQuests, eventMult, nameTagSub, pushRecord, rivalReward, rivalTarget, rollQuests,
   type Badge, type Finish, type NightEvent, type Quest,
 } from '../core/meta';
 import { Session } from '../net/session';
 import { fetchTop, submitScore, type BoardRow } from '../net/leaderboard';
 import { Blackboard } from '../world/blackboard';
+import { L } from '../core/i18n';
 import { BADGES } from '../core/meta';
 import type { Menus } from '../ui/menus';
 import { NpcGroup } from '../world/npcs';
@@ -23,6 +24,8 @@ import { PukpokPalayok } from './pukpokPalayok';
 import { Sipa } from './sipa';
 import { Taguan } from './taguan';
 import { TumbangPreso } from './tumbangPreso';
+import { Sungka } from './sungka';
+import { Trumpo } from './trumpo';
 import type { GameContext, GameResult } from './types';
 
 const INTERACT_RADIUS = 2.7;
@@ -48,6 +51,9 @@ const TAUNT_RADIUS = 6.5;
 /** Plaza chalkboard: beside the spawn point, angled toward it and the road. */
 const BOARD = { x: 1.0, z: 8.9, rot: Math.atan2(-2.5, -1.7) };
 const BOARD_REACH = 2.6;
+/** Aling Nena's sari-sari store counter (the Tindahan). */
+const STORE_SPOT = new THREE.Vector3(6.6, 0, -7.1);
+const STORE_REACH = 2.2;
 
 /**
  * Owns the street games, their NPC groups in the hub, the interact system,
@@ -58,7 +64,7 @@ export class GameManager {
   /** Order here = unlock order. Add new games to this list. */
   readonly games: BaseGame[] = [
     new TumbangPreso(), new Sipa(), new Patintero(), new Taguan(), new LangitLupa(),
-    new Piko(), new LuksongBaka(), new Holen(), new PukpokPalayok(),
+    new Piko(), new LuksongBaka(), new Holen(), new PukpokPalayok(), new Sungka(), new Trumpo(),
   ];
   active: BaseGame | null = null;
   session: Session | null = null;
@@ -71,6 +77,7 @@ export class GameManager {
   private nearSpot: BaseGame | null = null;
   private tauntAt = new Map<string, number>();
   private board: Blackboard;
+  private store: NpcGroup;
   private boardT = 0;
   private topT = 0;
   private top: { game: string; rows: BoardRow[] | null } = { game: '', rows: null };
@@ -78,6 +85,9 @@ export class GameManager {
   constructor(base: Omit<GameContext, 'finish'>, private save: SaveStore, private menus: Menus, private hooks: ManagerHooks) {
     this.ctx = { ...base, finish: (r) => this.finish(r) };
     this.board = new Blackboard(base.scene, base.physics, BOARD.x, BOARD.z, BOARD.rot);
+    this.store = new NpcGroup(base.scene, STORE_SPOT, [{ x: 7.05, z: -7.85, faceX: 6.6, faceZ: -5, mode: 'wave' }], new THREE.Vector3(6.6, 3.55, -7.6), base.blobs, base.groundAt);
+    this.store.kids[0].root.scale.setScalar(1.3); // Aling Nena is a grown-up
+    this.labelStore();
     for (const g of this.games) {
       const L = g.layout;
       const group = new NpcGroup(base.scene, L.spot, L.kids, L.labelPos, base.blobs, base.groundAt);
@@ -109,9 +119,9 @@ export class GameManager {
       if (!g.implemented) g.group.setLabel(g.name, 'Soon!', '#9aa3c7');
       else {
         const best = this.save.data.best[g.id];
-        const daily = this.daily().gameId === g.id && !this.dailyDoneToday() ? '  HAMON!' : '';
+        const daily = this.daily().gameId === g.id && !this.dailyDoneToday() ? L('  HAMON!', '  DAILY!') : '';
         const rv = this.rivalText(g.id);
-        g.group.setLabel(g.name, (best !== undefined ? `${starText(this.save.data.stars[g.id] ?? 0)}  Best ${best}` : 'Laro tayo!') + daily + (rv ? `  ·  ${rv}` : ''), g.layout.accent);
+        g.group.setLabel(g.name, (best !== undefined ? `${starText(this.save.data.stars[g.id] ?? 0)}  Best ${best}` : L('Laro tayo!', "Let's play!")) + daily + (rv ? `  ·  ${rv}` : ''), g.layout.accent);
       }
     });
   }
@@ -121,8 +131,8 @@ export class GameManager {
     const rv = RIVALS[id];
     const lvl = this.save.data.rivals[id] ?? 0;
     if (!rv) return '';
-    if (lvl >= RIVAL_MAX) return `${rv.name}: talo na!`;
-    return `Karibal: ${rv.name} ${rivalTarget(id, lvl)}`;
+    if (lvl >= RIVAL_MAX) return L(`${rv.name}: talo na!`, `${rv.name}: beaten!`);
+    return L(`Karibal: ${rv.name} ${rivalTarget(id, lvl)}`, `Rival: ${rv.name} ${rivalTarget(id, lvl)}`);
   }
 
   quests(): Quest[] {
@@ -134,6 +144,23 @@ export class GameManager {
   /** Name/title line other players see on my name tag. */
   get myTag(): string {
     return nameTagSub(this.save.data);
+  }
+
+  private labelStore(): void {
+    this.store.setLabel(L('Tindahan', 'Store'), L('Aling Nena  ·  Tsinelas, Titulo, Palamig', 'Aling Nena  ·  Flip-flops, Titles, Drinks'), '#ffd166');
+  }
+
+  /** Language switched: redraw every in-world label and the board. */
+  onLanguage(): void {
+    this.refreshLabels();
+    this.labelStore();
+    this.boardT = 0;
+    this.ctx.touch.relabel();
+    if (!this.active) {
+      this.ctx.touch.setActionLabel(L('Bato', 'Throw'));
+      this.ctx.hud.setObjective(this.hubObjective());
+    }
+    this.ctx.hud.setRank(this.progressText());
   }
 
   /** Keep the plaza chalkboard current (redraws only when something changed). */
@@ -157,7 +184,7 @@ export class GameManager {
     const ev = this.hooks.event();
     const qs = this.quests();
     this.board.draw({
-      date: new Date().toLocaleDateString('fil-PH', { weekday: 'long', month: 'long', day: 'numeric' }),
+      date: new Date().toLocaleDateString(L('fil-PH', 'en-US'), { weekday: 'long', month: 'long', day: 'numeric' }),
       rank: rankFor(data.tropaPoints).name,
       tropa: data.tropaPoints,
       barya: data.barya,
@@ -182,27 +209,31 @@ export class GameManager {
   progressText(): string {
     const total = Object.values(this.save.data.stars).reduce((a, b) => a + b, 0);
     const max = this.games.filter((g) => g.implemented).length * 3;
-    return `${rankFor(this.save.data.tropaPoints).name}  ·  ${total}/${max}★${this.save.data.streak > 1 ? `  ·  ${this.save.data.streak} araw` : ''}`;
+    return `${rankFor(this.save.data.tropaPoints).name}  ·  ${total}/${max}★${this.save.data.streak > 1 ? `  ·  ${this.save.data.streak} ${L('araw', 'days')}` : ''}`;
   }
 
   hubObjective(): string {
-    if (this.session) return `Nasa lobby ka (${this.session.code}). Buksan ang pause menu para makita ang lobby.`;
+    if (this.session) return L(`Nasa lobby ka (${this.session.code}). Buksan ang pause menu para makita ang lobby.`, `You're in lobby ${this.session.code}. Open the pause menu to see it.`);
     if (!this.dailyDoneToday()) {
       const d = this.daily();
       const g = this.gameById(d.gameId)!;
-      return `Hamon ngayon: ${g.name}, ${d.target}+ puntos (+${dailyReward(this.save.data.streak)} Tropa) ${g.where}`;
+      return L(
+        `Hamon ngayon: ${g.name}, ${d.target}+ puntos (+${dailyReward(this.save.data.streak)} Tropa) ${g.where}`,
+        `Today's challenge: score ${d.target}+ in ${g.name} (+${dailyReward(this.save.data.streak)} Tropa), ${g.where}`,
+      );
     }
     const next = this.games.find((g, i) => this.isPlayable(i) && this.save.data.best[g.id] === undefined);
-    if (next) return `Subukan ang ${next.name} ${next.where}`;
+    if (next) return L(`Subukan ang ${next.name} ${next.where}`, `Try ${next.name} (${next.blurb}), ${next.where}`);
     const unstarred = this.games.find((g) => g.implemented && (this.save.data.stars[g.id] ?? 0) < 3);
-    if (unstarred) return `Kunin ang ★★★ sa ${unstarred.name}! (${starText(this.save.data.stars[unstarred.id] ?? 0)})`;
-    return 'Ipunin ang Tropa Points! Laruin ulit o mag-lobby kasama ang tropa.';
+    if (unstarred) return L(`Kunin ang ★★★ sa ${unstarred.name}! (${starText(this.save.data.stars[unstarred.id] ?? 0)})`, `Go for ★★★ in ${unstarred.name}! (${starText(this.save.data.stars[unstarred.id] ?? 0)})`);
+    return L('Ipunin ang Tropa Points! Laruin ulit o mag-lobby kasama ang tropa.', 'Keep earning Tropa Points! Replay a game or start a lobby with friends.');
   }
 
   // ================================================================== frame
 
   update(dt: number, t: number, camPos: THREE.Vector3, controlsActive: boolean, simulate: boolean): void {
     for (const g of this.games) g.group.update(dt, t, camPos, g === this.active);
+    this.store.update(dt, t, camPos, false);
     const { hud, touch, input, player, isTouch } = this.ctx;
     this.updateBoard(dt);
 
@@ -222,10 +253,22 @@ export class GameManager {
       }
     }
     this.hubBanter(player.position, controlsActive);
+    // Aling Nena's store counter opens the Tindahan
+    const sd = Math.hypot(STORE_SPOT.x - player.position.x, STORE_SPOT.z - player.position.z);
+    if (controlsActive && sd < STORE_REACH && (!best || sd < bestD)) {
+      hud.setPrompt(L('Bumili kay Aling Nena', 'Shop at Aling Nena\'s'), isTouch() ? undefined : 'E');
+      touch.setInteractReady(true);
+      if (input.pressed('interact')) {
+        this.ctx.audio.play('bell');
+        this.hooks.onModal(true);
+        this.menus.showStore(() => this.closeMenu());
+      }
+      return;
+    }
     // the plaza chalkboard opens the Libro
     const bd = Math.hypot(this.board.front.x - player.position.x, this.board.front.z - player.position.z);
     if (controlsActive && bd < BOARD_REACH && (!best || bd < bestD)) {
-      hud.setPrompt('Libro ng Barangay', isTouch() ? undefined : 'E');
+      hud.setPrompt(L('Libro ng Barangay', 'Barangay Book'), isTouch() ? undefined : 'E');
       touch.setInteractReady(true);
       if (input.pressed('interact')) {
         this.ctx.audio.play('ui');
@@ -241,7 +284,7 @@ export class GameManager {
     }
     const key = isTouch() ? undefined : 'E';
     if (!best.implemented) hud.setPrompt(`${best.name}: Soon! Abangan.`);
-    else hud.setPrompt(`Laro tayo! ${best.name}`, key);
+    else hud.setPrompt(L(`Laro tayo! ${best.name}`, `Play ${best.name}`), key);
     touch.setInteractReady(best.implemented);
 
     if (input.pressed('interact')) {
@@ -284,8 +327,10 @@ export class GameManager {
     this.hooks.onModal(true);
     this.menus.showGameMenu({
       name: g.name,
+      blurb: g.blurb,
+      howTo: g.howTo,
       canSolo: playable,
-      lockedMsg: playable ? '' : `Tapusin muna ang ${this.games[i - 1]?.name ?? 'naunang laro'} para makapaglaro mag-isa.`,
+      lockedMsg: playable ? '' : L(`Tapusin muna ang ${this.games[i - 1]?.name ?? 'naunang laro'} para makapaglaro mag-isa.`, `Finish ${this.games[i - 1]?.name ?? 'the previous game'} first to play solo.`),
       inLobby: !!this.session,
       onSolo: () => this.startSolo(g),
       onCreate: () => this.createLobby(g),
@@ -306,7 +351,7 @@ export class GameManager {
       this.showLobby();
       return;
     }
-    this.menus.showBusy('Gumagawa ng lobby...');
+    this.menus.showBusy(L('Gumagawa ng lobby...', 'Creating a lobby...'));
     try {
       const s = await Session.host(g.id, this.menus.playerName, this.menus.playerFace, this.myTag);
       this.attachSession(s);
@@ -452,6 +497,14 @@ export class GameManager {
       r.points += extra;
       eventMsg = `${ev!.name}: +${extra} Tropa (x${mult})`;
     }
+    // a treat from the store boosts this game's Tropa
+    if (data.boost > 0 && r.points > 0) {
+      const extra = Math.round(r.points * (TREAT_MULT - 1));
+      r.points += extra;
+      data.boost--;
+      const note = L(`Pampalamig: +${extra} Tropa`, `Treat bonus: +${extra} Tropa`);
+      eventMsg = eventMsg ? `${eventMsg}  ·  ${note}` : note;
+    }
     // stars
     const stars = starsFor(g.id, r.score);
     const prevStars = data.stars[g.id] ?? 0;
@@ -464,7 +517,7 @@ export class GameManager {
       data.dailyDone = today();
       const bonus = dailyReward(data.streak - 1);
       r.points += bonus;
-      dailyMsg = `Hamon ng Araw, tapos! +${bonus} Tropa  ·  ${data.streak} araw sunod-sunod`;
+      dailyMsg = L(`Hamon ng Araw, tapos! +${bonus} Tropa  ·  ${data.streak} araw sunod-sunod`, `Daily challenge done! +${bonus} Tropa  ·  ${data.streak}-day streak`);
     }
     // rival (solo or multiplayer, your own score counts)
     let rivalMsg: string | undefined;
@@ -479,9 +532,9 @@ export class GameManager {
         data.rivals[g.id] = lvl + 1;
         data.barya += pay;
         rivalMsg = lvl + 1 >= RIVAL_MAX
-          ? `Talo mo na si ${rv.name} sa lahat ng level! "${rv.lose}" +${pay} Barya`
-          : `Talo mo si ${rv.name} (${target})! "${rv.lose}" +${pay} Barya  ·  Susunod: ${rivalTarget(g.id, lvl + 1)}`;
-      } else rivalMsg = `${rv.name}: "${rv.win}" Kailangan mo ng ${target}.`;
+          ? L(`Talo mo na si ${rv.name} sa lahat ng level! "${rv.lose}" +${pay} Barya`, `You beat ${rv.name} at every level! "${rv.lose}" +${pay} Barya`)
+          : L(`Talo mo si ${rv.name} (${target})! "${rv.lose}" +${pay} Barya  ·  Susunod: ${rivalTarget(g.id, lvl + 1)}`, `You beat ${rv.name} (${target})! "${rv.lose}" +${pay} Barya  ·  Next: ${rivalTarget(g.id, lvl + 1)}`);
+      } else rivalMsg = L(`${rv.name}: "${rv.win}" Kailangan mo ng ${target}.`, `${rv.name}: "${rv.win}" You need ${target} to beat them.`);
     }
     // torneo standings (every client computes the same totals from the host's rows)
     let tourLines: string[] | undefined;
@@ -498,12 +551,12 @@ export class GameManager {
       const table = [...t.totals].sort((a, b) => b[1] - a[1]);
       const last = t.i >= t.list.length - 1;
       tourLines = [
-        last ? 'TORNEO: Huling resulta' : `TORNEO: Laro ${t.i + 1} sa ${t.list.length}`,
-        ...table.map(([id, pts], i) => `${i + 1}. ${id === g.net!.selfId ? 'Ikaw' : g.net!.nameOf(id)}  ${pts} pts`),
+        last ? L('TORNEO: Huling resulta', 'TOURNAMENT: Final standings') : L(`TORNEO: Laro ${t.i + 1} sa ${t.list.length}`, `TOURNAMENT: Game ${t.i + 1} of ${t.list.length}`),
+        ...table.map(([id, pts], i) => `${i + 1}. ${id === g.net!.selfId ? L('Ikaw', 'You') : g.net!.nameOf(id)}  ${pts} pts`),
       ];
       if (last) {
         tourWon = table[0]?.[0] === g.net.selfId && (table[1]?.[1] ?? -1) < table[0][1];
-        if (tourWon) tourLines.push('Ikaw ang KAMPEON ng Torneo!');
+        if (tourWon) tourLines.push(L('Ikaw ang KAMPEON ng Torneo!', 'You are the TOURNAMENT CHAMPION!'));
       } else tourNext = t.list[t.i + 1];
     }
     // records, quests, points
@@ -514,8 +567,8 @@ export class GameManager {
     };
     const q = advanceQuests(data, this.quests(), fin, r.points);
     if (q.done.length) r.points += QUEST_TROPA * q.done.length;
-    const questMsgs = q.done.map((x) => `Gawain tapos: ${x.text}`);
-    if (q.bonus) questMsgs.push('Lahat ng gawain ngayon, tapos! Bonus Barya!');
+    const questMsgs = q.done.map((x) => L(`Gawain tapos: ${x.text}`, `Quest done: ${x.text}`));
+    if (q.bonus) questMsgs.push(L('Lahat ng gawain ngayon, tapos! Bonus Barya!', "All of today's quests done! Bonus Barya!"));
     data.barya += Math.round(r.points);
     this.save.addPoints(r.points);
     const isBest = this.save.recordScore(g.id, r.score);
@@ -525,17 +578,17 @@ export class GameManager {
     let rankMsg: string | undefined;
     if (rankAfter > rankBefore) {
       const sl = SLIPPERS.find((x) => x.rank === rankAfter);
-      rankMsg = `Bagong ranggo: ${rankFor(data.tropaPoints).name}!${sl ? `  Bagong tsinelas: ${sl.name}` : ''}`;
+      rankMsg = L(`Bagong ranggo: ${rankFor(data.tropaPoints).name}!${sl ? `  Bagong tsinelas: ${sl.name}` : ''}`, `New rank: ${rankFor(data.tropaPoints).name}!${sl ? `  New flip-flops: ${sl.name}` : ''}`);
       this.session?.setSub(this.myTag);
     }
     // near-miss nudge: the closest goal you just missed
     let nudge: string | undefined;
     const gap = nextStarGap(g.id, r.score);
-    if (prevBest !== undefined && r.score < prevBest && prevBest - r.score <= Math.max(5, prevBest * 0.25)) nudge = `Kulang ka na lang ng ${prevBest - r.score} para sa best mo!`;
-    else if (gap && gap.gap <= Math.max(5, r.score * 0.3)) nudge = `Kulang ka na lang ng ${gap.gap} para sa ${starText(gap.stars)}!`;
+    if (prevBest !== undefined && r.score < prevBest && prevBest - r.score <= Math.max(5, prevBest * 0.25)) nudge = L(`Kulang ka na lang ng ${prevBest - r.score} para sa best mo!`, `Just ${prevBest - r.score} short of your best!`);
+    else if (gap && gap.gap <= Math.max(5, r.score * 0.3)) nudge = L(`Kulang ka na lang ng ${gap.gap} para sa ${starText(gap.stars)}!`, `Just ${gap.gap} more for ${starText(gap.stars)}!`);
     else {
       const nr = nextRank(data.tropaPoints);
-      if (nr) nudge = `${nr.at - data.tropaPoints} Tropa pa para maging ${nr.name}`;
+      if (nr) nudge = L(`${nr.at - data.tropaPoints} Tropa pa para maging ${nr.name}`, `${nr.at - data.tropaPoints} more Tropa to become ${nr.name}`);
     }
     this.save.persist();
     this.refreshLabels();
@@ -553,7 +606,7 @@ export class GameManager {
     if (data.settings.onlineScores && r.score > 0) {
       submitScore(g.id, r.score, this.menus.playerName).then((res) => {
         if (!res?.week || res.week > 20 || this.active !== g) return;
-        window.setTimeout(() => this.ctx.hud.toast(`Pang-#${res.week} ka ngayong linggo sa ${g.name}!`, 'good', 2600), 1800);
+        window.setTimeout(() => this.ctx.hud.toast(L(`Pang-#${res.week} ka ngayong linggo sa ${g.name}!`, `#${res.week} this week in ${g.name}!`), 'good', 2600), 1800);
       });
     }
     const s = g.net;
@@ -565,7 +618,7 @@ export class GameManager {
       this.hooks.onModal(true);
       const extra = { best: this.save.data.best[g.id] ?? r.score, isBest, ...prog };
       if (!s) {
-        this.menus.showEnd(r, extra, { onRetry: () => this.retry(), onBack: () => this.quitFromCard(), backLabel: 'Balik sa barangay' });
+        this.menus.showEnd(r, extra, { onRetry: () => this.retry(), onBack: () => this.quitFromCard(), backLabel: L('Balik sa barangay', 'Back to the barangay') });
       } else {
         const tt = this.tour;
         const nextName = tourNext ? this.gameById(tourNext)?.name ?? tourNext : '';
@@ -574,21 +627,21 @@ export class GameManager {
         if (s.isHost) {
           if (tt && tourNext) {
             onRetry = () => this.tourStep({ id: tt.id, list: tt.list, i: tt.i + 1 });
-            retryLabel = `Susunod: ${nextName} (${tt.i + 2}/${tt.list.length})`;
+            retryLabel = L(`Susunod: ${nextName} (${tt.i + 2}/${tt.list.length})`, `Next: ${nextName} (${tt.i + 2}/${tt.list.length})`);
           } else if (tt) {
             onRetry = () => this.startTour();
-            retryLabel = 'Bagong Torneo';
+            retryLabel = L('Bagong Torneo', 'New Tournament');
           } else onRetry = () => s.startGame(g.nextOpts());
         }
         this.menus.showEnd(r, extra, {
           onRetry,
           retryLabel,
-          retryNote: s.isHost ? '' : tourNext ? `Susunod sa Torneo: ${nextName}. Hintayin ang host.` : 'Hintayin ang host para sa susunod na laro.',
+          retryNote: s.isHost ? '' : tourNext ? L(`Susunod sa Torneo: ${nextName}. Hintayin ang host.`, `Next in the tournament: ${nextName}. Waiting for the host.`) : L('Hintayin ang host para sa susunod na laro.', 'Waiting for the host to start the next game.'),
           onBack: () => {
             this.quitFromCard();
             this.showLobby();
           },
-          backLabel: 'Balik sa lobby',
+          backLabel: L('Balik sa lobby', 'Back to the lobby'),
         });
       }
     }, 1100);
@@ -605,7 +658,7 @@ export class GameManager {
     this.save.persist();
     this.ctx.hud.setPoints(data.tropaPoints);
     this.ctx.hud.setRank(this.progressText());
-    this.ctx.hud.toast('Sorbetes! +20 Tropa, +15 Barya', 'good', 2000);
+    this.ctx.hud.toast(L('Sorbetes! +20 Tropa, +15 Barya', 'Ice cream! +20 Tropa, +15 Barya'), 'good', 2000);
     this.ctx.audio.play('pickup');
     if (badges.length) this.hooks.onBadges(badges);
   }
@@ -655,7 +708,7 @@ export class GameManager {
     hand.showLeg(false);
     hud.clearGameWidgets();
     hud.setCrosshair(true);
-    touch.setActionLabel('Bato');
+    touch.setActionLabel(L('Bato', 'Throw'));
     touch.setJumpVisible(true);
     this.active = null;
     this.ended = false;

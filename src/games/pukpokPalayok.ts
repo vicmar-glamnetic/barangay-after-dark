@@ -1,3 +1,4 @@
+import { L, isEn } from '../core/i18n';
 import * as THREE from 'three';
 import { BaseGame, type EndRow } from './baseGame';
 import type { HubLayout } from './types';
@@ -27,7 +28,15 @@ export class PukpokPalayok extends BaseGame {
   readonly id = 'pukpokPalayok';
   readonly name = 'Pukpok Palayok';
   readonly implemented = true;
-  readonly where = 'sa pagitan ng plaza at court';
+  get where() { return L('sa pagitan ng plaza at court', 'between the plaza and the court'); }
+  get blurb() { return L('Basagin ang palayok nang nakapiring', 'Break the clay pot blindfolded, piñata style'); }
+  get howTo() {
+    return [
+      L('Nakapiring ka at pinaikot. May nakasabit na palayok na may kendi.', "You're blindfolded and spun around. A clay pot full of candy hangs somewhere nearby."),
+      L('Sundan ang sigaw ng mga bata: "Kaliwa!" (left), "Kanan!" (right), "Diretso!" (straight).', 'Follow the kids shouting directions, and the rattle of candy inside the pot.'),
+      L('Kapag "Ngayon na!", hampasin! 3 palayok, limitado ang hampas.', 'When they yell "Now!", swing! 3 pots, and only a few swings each.'),
+    ];
+  }
   readonly layout: HubLayout = {
     spot: new THREE.Vector3(-2.5, 0, 12.4),
     labelPos: new THREE.Vector3(-2.5, 3.5, 15.5),
@@ -107,7 +116,7 @@ export class PukpokPalayok extends BaseGame {
     this.round = 0;
     this.score = 0;
     this.broken = 0;
-    touch.setActionLabel('Hampas');
+    touch.setActionLabel(L('Hampas', 'Swing'));
     touch.setJumpVisible(false);
     hud.setCrosshair(false);
     hand.setHolding(false);
@@ -124,7 +133,7 @@ export class PukpokPalayok extends BaseGame {
     player.moveEnabled = true;
     player.lookEnabled = true;
     hand.showStick(false);
-    touch.setActionLabel('Bato');
+    touch.setActionLabel(L('Bato', 'Throw'));
     touch.setJumpVisible(true);
     this.pot.visible = true;
     this.candy.visible = false;
@@ -157,10 +166,10 @@ export class PukpokPalayok extends BaseGame {
     player.lookEnabled = false;
     player.canRun = false;
     overlays.blind(true);
-    overlays.shout(`Palayok ${this.round}/${ROUNDS}: Ikot!`, 1800);
+    overlays.shout(L(`Palayok ${this.round}/${ROUNDS}: Ikot!`, `Pot ${this.round}/${ROUNDS}: Spin!`), 1800);
     audio.play('cheer');
-    audio.say('Ikot! Ikot! Ikot!', { rate: 1.05 });
-    hud.setObjective('Nakapiring ka! Sundan ang sigaw ng mga bata at ang kalansing ng kendi.');
+    audio.say(L('Ikot! Ikot! Ikot!', 'Spin! Spin! Spin!'), { rate: 1.05 });
+    hud.setObjective(L('Nakapiring ka! Sundan ang sigaw ng mga bata at ang kalansing ng kendi.', "You're blindfolded! Follow the kids' shouts and the rattle of candy."));
     this.phase = 'spin';
     this.timer = 0;
   }
@@ -191,8 +200,8 @@ export class PukpokPalayok extends BaseGame {
           player.lookEnabled = true;
           this.hintT = 0.4;
           this.rattleT = 0.2;
-          overlays.shout('Takbo! Hanapin!', 900);
-          audio.say('Takbo! Hanapin!');
+          overlays.shout(L('Takbo! Hanapin!', 'Go! Find it!'), 900);
+          audio.say(L('Takbo! Hanapin!', 'Go! Find it!'));
         }
         break;
       }
@@ -208,15 +217,16 @@ export class PukpokPalayok extends BaseGame {
         this.hintT -= dt;
         if (this.hintT <= 0) {
           const h = this.hint();
-          overlays.shout(h, 950);
+          // English shows the Filipino shout too, so players learn the words
+          overlays.shout(isEn() ? `${h.en} (${h.fil})` : h.fil, 950);
           audio.play('tick', { vol: 0.4 });
           // the kids yell it out loud; repeat lines get a little more urgent
-          audio.say(h, { rate: h === this.lastHint ? 1.3 : 1.15 });
-          this.lastHint = h;
+          audio.say(L(h.fil, h.en), { rate: h.fil === this.lastHint ? 1.3 : 1.15 });
+          this.lastHint = h.fil;
           this.hintT = 1.4;
         }
         if (input.pressed('action') || input.tapPressed) this.swing();
-        else if (this.time <= 0) this.roundOver(false, 'Ubos ang oras!');
+        else if (this.time <= 0) this.roundOver(false, L('Ubos ang oras!', "Time's up!"));
         break;
       }
       case 'swinging':
@@ -232,24 +242,25 @@ export class PukpokPalayok extends BaseGame {
         break;
     }
     hud.setTimer(this.phase === 'play' || this.phase === 'swinging' ? String(Math.max(0, Math.ceil(this.time))) : null);
-    hud.setStat(`Palayok ${this.round}/${ROUNDS}   Hampas: ${this.swings}   Puntos: ${this.score}   ${this.battleText()}`);
+    hud.setStat(L(`Palayok ${this.round}/${ROUNDS}   Hampas: ${this.swings}   Puntos: ${this.score}`, `Pot ${this.round}/${ROUNDS}   Swings: ${this.swings}   Score: ${this.score}`) + `   ${this.battleText()}`);
     this.battleCheck();
   }
 
   /** What the kids yell, based on where the pot is relative to your view. */
-  private hint(): string {
+  private hint(): { fil: string; en: string } {
     const { player } = this.ctx;
     const dx = POT.x - player.position.x, dz = POT.z - player.position.z;
     const dist = Math.hypot(dx, dz);
     const want = Math.atan2(-dx, -dz); // yaw that faces the pot
     let a = want - player.yaw;
     a = Math.atan2(Math.sin(a), Math.cos(a)); // + = pot is to the left
-    if (dist < REACH * 0.9 && Math.abs(a) < 0.5) return 'Ngayon na! Hampas!';
-    if (Math.abs(a) > 2.4) return 'Talikod ka! Ikot!';
-    if (a > 0.35) return dist < 2 ? 'Konting kaliwa!' : 'Kaliwa!';
-    if (a < -0.35) return dist < 2 ? 'Konting kanan!' : 'Kanan!';
-    if (dist > 6) return 'Malayo ka na! Diretso!';
-    return dist < 2.2 ? 'Malapit na! Diretso!' : 'Diretso!';
+    const h = (fil: string, en: string) => ({ fil, en });
+    if (dist < REACH * 0.9 && Math.abs(a) < 0.5) return h('Ngayon na! Hampas!', 'Now! Swing!');
+    if (Math.abs(a) > 2.4) return h('Talikod ka! Ikot!', 'Wrong way! Turn around!');
+    if (a > 0.35) return dist < 2 ? h('Konting kaliwa!', 'A little left!') : h('Kaliwa!', 'Left!');
+    if (a < -0.35) return dist < 2 ? h('Konting kanan!', 'A little right!') : h('Kanan!', 'Right!');
+    if (dist > 6) return h('Malayo ka na! Diretso!', 'Too far! Go straight!');
+    return dist < 2.2 ? h('Malapit na! Diretso!', 'Almost there! Straight ahead!') : h('Diretso!', 'Straight ahead!');
   }
 
   private swing(): void {
@@ -271,11 +282,11 @@ export class PukpokPalayok extends BaseGame {
       this.score += pts;
       this.broken++;
       this.breakPot();
-      this.roundOver(true, `Basag! +${pts}`);
-    } else if (this.swings <= 0) this.roundOver(false, 'Mintis! Ubos na ang hampas.');
+      this.roundOver(true, L(`Basag! +${pts}`, `Smashed! +${pts}`));
+    } else if (this.swings <= 0) this.roundOver(false, L('Mintis! Ubos na ang hampas.', 'Missed! Out of swings.'));
     else {
-      this.ctx.overlays.shout('Mintis!', 700);
-      this.ctx.audio.say('Mintis! Ulit!');
+      this.ctx.overlays.shout(L('Mintis!', 'Missed!'), 700);
+      this.ctx.audio.say(L('Mintis! Ulit!', 'Missed! Try again!'));
       this.phase = 'play';
     }
   }
@@ -284,7 +295,7 @@ export class PukpokPalayok extends BaseGame {
     const { overlays, hud, audio, player } = this.ctx;
     overlays.blind(false);
     hud.toast(msg, hit ? 'good' : 'bad', 1500);
-    audio.say(hit ? 'Basag! Ang galing!' : msg.startsWith('Ubos ang oras') ? 'Ubos na ang oras!' : 'Sayang! Mintis!', { pitch: 1.6 });
+    audio.say(hit ? L('Basag! Ang galing!', 'Smashed! Amazing!') : this.time <= 0 ? L('Ubos na ang oras!', "Time's up!") : L('Sayang! Mintis!', 'Aww, missed!'), { pitch: 1.6 });
     if (!hit) {
       audio.play('lose');
       // show where it was
@@ -344,8 +355,8 @@ export class PukpokPalayok extends BaseGame {
 
   private endRun(): void {
     this.phase = 'done';
-    this.ctx.hud.setObjective(this.multiplayer ? 'Tapos ka na. Hinihintay ang iba...' : '');
-    this.battleReport(this.score, true, this.broken >= 2, [`Nabasag: ${this.broken}/${ROUNDS}`]);
+    this.ctx.hud.setObjective(this.multiplayer ? L('Tapos ka na. Hinihintay ang iba...', "You're done. Waiting for the others...") : '');
+    this.battleReport(this.score, true, this.broken >= 2, [L(`Nabasag: ${this.broken}/${ROUNDS}`, `Pots broken: ${this.broken}/${ROUNDS}`)]);
   }
 
   protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {
@@ -353,11 +364,11 @@ export class PukpokPalayok extends BaseGame {
     this.ctx.finish({
       gameName: this.name,
       score: mine.score,
-      scoreLabel: 'puntos',
+      scoreLabel: L('puntos', 'points'),
       points: mine.score,
       won,
       lines: [...mine.lines, ...ranking],
-      shareText: `Nakabasag ako ng ${n} palayok nang nakapiring, ${mine.score} puntos sa Hari ng Kanto!`,
+      shareText: L(`Nakabasag ako ng ${n} palayok nang nakapiring, ${mine.score} puntos sa Hari ng Kanto!`, `I smashed ${n} clay pots blindfolded, ${mine.score} points on Hari ng Kanto!`),
     });
   }
 }

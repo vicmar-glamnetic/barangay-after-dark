@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import * as THREE from 'three';
 import type { GameData, Session } from '../net/session';
 import type { Sfx } from '../core/audio';
@@ -36,7 +37,12 @@ export abstract class BaseGame {
   abstract readonly name: string;
   abstract readonly implemented: boolean;
   abstract readonly layout: HubLayout;
+  /** Where it is in the barangay ("sa covered court" / "at the covered court"). */
   abstract readonly where: string;
+  /** One line on what the game is, for players who never played it. */
+  abstract readonly blurb: string;
+  /** How to play, 2-4 short steps (shown on the game's menu card). */
+  abstract readonly howTo: string[];
 
   protected ctx!: GameContext;
   group!: NpcGroup;
@@ -94,8 +100,8 @@ export abstract class BaseGame {
     return Math.max(0, this.roster().indexOf(id));
   }
   protected nameOf(id: string): string {
-    if (id === this.selfId) return 'Ikaw';
-    return this.net ? this.net.nameOf(id) : 'Ikaw';
+    if (id === this.selfId) return L('Ikaw', 'You');
+    return this.net ? this.net.nameOf(id) : L('Ikaw', 'You');
   }
   /** Latest known feet position of any participant (host logic uses this). */
   protected posOf(id: string): THREE.Vector3 | null {
@@ -229,7 +235,7 @@ export abstract class BaseGame {
     const top = sorted[0]?.score ?? 0;
     const won = this.multiplayer ? mine.score === top && top > 0 : mine.won;
     const ranking = this.multiplayer
-      ? sorted.map((r, i) => `${i + 1}. ${r.id === this.selfId ? 'Ikaw' : this.net!.nameOf(r.id)}  ${r.score}`)
+      ? sorted.map((r, i) => `${i + 1}. ${r.id === this.selfId ? L('Ikaw', 'You') : this.net!.nameOf(r.id)}  ${r.score}`)
       : [];
     this.finishMine(mine, won, ranking, extra);
   }

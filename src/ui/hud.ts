@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 import { el, onTap } from './dom';
 
 /**
@@ -25,7 +26,7 @@ export class Hud {
   private powerFill = el('i');
   private timer = el('div.timer.hidden');
   private fps = el('div.fps.hidden');
-  private clickHint = el('div.click-hint.hidden', { text: 'Click para maglaro' });
+  private clickHint = el('div.click-hint.hidden', { text: L('Click para maglaro', 'Click to play') });
   readonly pauseBtn = el('button.icon-btn.interactive', { text: 'II', attrs: { 'aria-label': 'Pause' } });
 
   private toastTimer = 0;
@@ -136,6 +137,7 @@ export class Hud {
   }
 
   setClickHint(v: boolean): void {
+    this.set('clickHint', this.clickHint, L('Click para maglaro', 'Click to play'));
     this.clickHint.classList.toggle('hidden', !v);
   }
 
