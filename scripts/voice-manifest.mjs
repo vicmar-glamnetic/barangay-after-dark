@@ -16,3 +16,15 @@ for (const lang of ['fil', 'en']) {
 }
 writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 console.log(`voice: ${Object.keys(manifest.fil).length} Filipino + ${Object.keys(manifest.en).length} English recordings`);
+
+// Ambience recordings: public/sfx/<name>.(mp3|ogg|m4a|wav) for rooster, kids, crowd, dogs, crickets, motorbike.
+const sfxDir = fileURLToPath(new URL('../public/sfx/', import.meta.url));
+mkdirSync(sfxDir, { recursive: true });
+const NAMES = ['rooster', 'kids', 'crowd', 'dogs', 'crickets', 'motorbike'];
+const sfx = {};
+for (const f of readdirSync(sfxDir)) {
+  const m = f.match(/^([a-z]+)\.(mp3|m4a|ogg|wav)$/);
+  if (m && NAMES.includes(m[1])) sfx[m[1]] = f;
+}
+writeFileSync(join(sfxDir, 'manifest.json'), JSON.stringify(sfx, null, 2) + '\n');
+console.log(`sfx: ${Object.keys(sfx).join(', ') || 'none (using synthesized sounds)'}`);

@@ -465,7 +465,115 @@ export class AudioSys {
     this.timers.push(window.setTimeout(fn, ms));
   }
 
+  // ---------------------------------------------------------------- recorded ambience (public/sfx)
+
+  /** Decoded recordings from public/sfx (see public/sfx/README.md). Missing ones fall back to synthesis. */
+  private samples = new Map<string, AudioBuffer>();
+
+  private loadSamples(): void {
+    const ctx = this.ctx!;
+    fetch(new URL('sfx/manifest.json', document.baseURI).toString())
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((m: Record<string, string>) => {
+        for (const [name, file] of Object.entries(m ?? {})) {
+          fetch(new URL(`sfx/${file}`, document.baseURI).toString())
+            .then((r) => r.arrayBuffer())
+            .then((b) => ctx.decodeAudioData(b))
+            .then((buf) => {
+              this.samples.set(name, buf);
+              if (name === 'crickets') this.useCricketSample(buf);
+              if (name === 'crowd') this.startCrowd(buf);
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }
+
+  /** Play a recording at a spot in the world (or flat if no pos). Returns false if it isn't loaded. */
+  private sample(name: string, pos: THREE.Vector3 | null, vol: number, ref = 6, rolloff = 0.8): boolean {
+    const buf = this.samples.get(name);
+    if (!buf || !this.live) return false;
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 0.94 + Math.random() * 0.12; // no two plays sound identical
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g);
+    if (pos) g.connect(this.panner(pos, ref, rolloff)).connect(this.amb);
+    else g.connect(this.amb);
+    src.start();
+    return true;
+  }
+
+  /** Recorded crickets replace the synthesized chorus (still swelling in and out). */
+  private useCricketSample(buf: AudioBuffer): void {
+    if (!this.ctx || !this.crickets) return;
+    const ctx = this.ctx;
+    const old = this.crickets;
+    const bus = ctx.createGain();
+    bus.gain.value = old.gain.value;
+    bus.connect(this.amb);
+    const s = ctx.createBufferSource();
+    s.buffer = buf;
+    s.loop = true;
+    const g = ctx.createGain();
+    g.gain.value = 0.35;
+    s.connect(g).connect(bus);
+    s.start();
+    old.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+    this.crickets = bus;
+  }
+
+  /** Recorded chatter loops at the titas' table (only heard up close). */
+  private crowdOn = false;
+  private startCrowd(buf: AudioBuffer): void {
+    if (this.crowdOn || !this.ctx) return;
+    this.crowdOn = true;
+    const ctx = this.ctx;
+    const s = ctx.createBufferSource();
+    s.buffer = buf;
+    s.loop = true;
+    const g = ctx.createGain();
+    g.gain.value = 0.9;
+    s.connect(g).connect(this.panner(new THREE.Vector3(-15.5, 1.5, -6.35), 2, 1.8)).connect(this.amb);
+    s.start();
+  }
+
+  /** A motorbike / tricycle passing along the main road now and then. */
+  private motorbikeLoop(): void {
+    const buf = this.samples.get('motorbike');
+    if (buf && this.live) {
+      const ctx = this.ctx!;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const p = ctx.createPanner();
+      p.panningModel = 'equalpower';
+      p.distanceModel = 'inverse';
+      p.refDistance = 6;
+      p.rolloffFactor = 0.9;
+      const t = ctx.currentTime;
+      const dur = Math.max(3, buf.duration);
+      const z = dir > 0 ? -1.6 : 1.6;
+      if (p.positionX) {
+        p.positionX.setValueAtTime(-45 * dir, t);
+        p.positionX.linearRampToValueAtTime(45 * dir, t + dur);
+        p.positionY.value = 0.8;
+        p.positionZ.value = z;
+      } else p.setPosition(0, 0.8, z);
+      const s = ctx.createBufferSource();
+      s.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = 1.2;
+      s.connect(g).connect(p).connect(this.amb);
+      s.start(t);
+    }
+    this.later(45000 + Math.random() * 60000, () => this.motorbikeLoop());
+  }
+
   private startAmbience(): void {
+    this.loadSamples();
+    this.later(30000 + Math.random() * 30000, () => this.motorbikeLoop());
     this.startCrickets();
     this.later(6000 + Math.random() * 8000, () => this.dogLoop());
     this.later(2500, () => this.startVideoke());
@@ -539,6 +647,10 @@ export class AudioSys {
 
   /** A rooster crowing from the coop now and then (yes, they crow at night too). */
   private roosterLoop(): void {
+    if (this.sample('rooster', new THREE.Vector3(-10.2, 1, 24.7), 1.1, 5, 0.7)) {
+      this.later(70000 + Math.random() * 70000, () => this.roosterLoop());
+      return;
+    }
     if (this.live) {
       const ctx = this.ctx!;
       const out = ctx.createGain();
@@ -579,6 +691,11 @@ export class AudioSys {
 
   /** Kids laughing far away. */
   private kidsLoop(): void {
+    const a0 = Math.random() * Math.PI * 2;
+    if (this.sample('kids', new THREE.Vector3(Math.cos(a0) * 28, 1, Math.sin(a0) * 28), 1.0, 8, 0.6)) {
+      this.later(35000 + Math.random() * 40000, () => this.kidsLoop());
+      return;
+    }
     if (this.live) {
       const a = Math.random() * Math.PI * 2;
       const pos = new THREE.Vector3(Math.cos(a) * 30, 1, Math.sin(a) * 30);
@@ -589,7 +706,7 @@ export class AudioSys {
 
   /** The titas' chismis murmur at their table (only heard up close). */
   private murmurLoop(): void {
-    if (this.live) {
+    if (this.live && !this.crowdOn) {
       const ctx = this.ctx!;
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
@@ -632,6 +749,11 @@ export class AudioSys {
   }
 
   private dogLoop(): void {
+    const ad = Math.random() * Math.PI * 2;
+    if (this.sample('dogs', new THREE.Vector3(Math.cos(ad) * 45, 1, Math.sin(ad) * 45), 1.6, 6, 0.6)) {
+      this.later(15000 + Math.random() * 25000, () => this.dogLoop());
+      return;
+    }
     if (this.live) {
       const ctx = this.ctx!;
       const ang = Math.random() * Math.PI * 2;
