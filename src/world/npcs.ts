@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { labelTexture, radialTexture } from './textures';
+import { LABEL_ANCHOR_Y, LABEL_H, labelTexture, radialTexture } from './textures';
 import type { BlobShadows } from './shadows';
 
 export type KidMode = 'idle' | 'wave' | 'cheer' | 'run' | 'carry' | 'crouch' | 'count' | 'still' | 'guard' | 'baka';
@@ -436,7 +436,10 @@ export class NpcGroup {
     const { tex, aspect } = labelTexture('...', '...', '#ffd166');
     this.labelTex = tex;
     this.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xdcdcdc, fog: false, depthWrite: false, transparent: true }));
-    this.label.scale.set(1.15 * aspect, 1.15, 1);
+    // same on-screen size as before (1.15 m per 160 px), anchored on the title
+    const k = 1.15 / 160;
+    this.label.scale.set(k * LABEL_H * aspect, k * LABEL_H, 1);
+    this.label.center.set(0.5, 1 - LABEL_ANCHOR_Y / LABEL_H);
     this.label.position.copy(labelPos);
     this.label.renderOrder = 5;
     scene.add(this.label);

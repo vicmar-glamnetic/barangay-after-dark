@@ -260,8 +260,13 @@ export function canTexture(): THREE.CanvasTexture {
  * Floating NPC label: "Tumbang Preso - Laro tayo!" style.
  * Returns the canvas texture plus its aspect so the sprite can be scaled.
  */
+/** Label canvas size. Tall enough for a title plus a sub line that wraps to two pills. */
+export const LABEL_W = 512, LABEL_H = 212;
+/** Where the title's middle sits (px from the top): the sprite anchors there. */
+export const LABEL_ANCHOR_Y = 80;
+
 export function labelTexture(title: string, sub: string, accent: string, existing?: THREE.CanvasTexture): { tex: THREE.CanvasTexture; aspect: number } {
-  const W = 512, H = 160;
+  const W = LABEL_W, H = LABEL_H;
   const c = (existing?.image as HTMLCanvasElement | undefined) ?? canvas(W, H)[0];
   const g = c.getContext('2d')!;
   g.clearRect(0, 0, W, H);
@@ -279,14 +284,46 @@ export function labelTexture(title: string, sub: string, accent: string, existin
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(title, W / 2, 58, tw - 30);
-  // status pill under the title
-  g.font = `800 34px ${FONT}`;
-  const sw = g.measureText(sub).width + 40;
-  g.fillStyle = accent;
-  roundRect(g, (W - sw) / 2, 108, sw, 46, 23);
-  g.fill();
-  g.fillStyle = '#1a1230';
-  g.fillText(sub, W / 2, 132);
+
+  // status pill(s) under the title: shrink to fit, then wrap at the "·" so nothing is cut off
+  const maxText = W - 48;
+  const fit = (text: string): number => {
+    let size = 34;
+    g.font = `800 ${size}px ${FONT}`;
+    while (size > 24 && g.measureText(text).width > maxText) {
+      size -= 2;
+      g.font = `800 ${size}px ${FONT}`;
+    }
+    return size;
+  };
+  let lines = [sub];
+  if (sub && fit(sub) <= 24 && g.measureText(sub).width > maxText) {
+    const parts = sub.split(/\s+·\s+/);
+    if (parts.length > 1) {
+      // balance the two lines by length
+      let best = 1, bestDiff = Infinity;
+      for (let i = 1; i < parts.length; i++) {
+        const a = parts.slice(0, i).join('  ·  ').length, b = parts.slice(i).join('  ·  ').length;
+        if (Math.abs(a - b) < bestDiff) {
+          bestDiff = Math.abs(a - b);
+          best = i;
+        }
+      }
+      lines = [parts.slice(0, best).join('  ·  '), parts.slice(best).join('  ·  ')];
+    }
+  }
+  lines.forEach((line, i) => {
+    if (!line) return;
+    const size = fit(line);
+    const sw = Math.min(W - 8, g.measureText(line).width + 40);
+    const y = 108 + i * 50;
+    g.fillStyle = accent;
+    roundRect(g, (W - sw) / 2, y, sw, 46, 23);
+    g.fill();
+    g.fillStyle = '#1a1230';
+    g.font = `800 ${size}px ${FONT}`;
+    g.fillText(line, W / 2, y + 24, maxText);
+  });
   if (existing) {
     existing.needsUpdate = true;
     return { tex: existing, aspect: W / H };

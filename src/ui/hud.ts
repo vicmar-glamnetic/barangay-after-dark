@@ -36,7 +36,9 @@ export class Hud {
     this.pointsEl.append(el('span.star', { text: '★' }), this.pointsNum, el('span', { text: 'Tropa Points' }));
     this.power.append(this.powerFill);
     this.meter.append(this.meterZone, this.meterMark, this.meterLabel);
-    this.root.append(this.meter, this.crosshair, this.pointsEl, this.rank, this.eventEl, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
+    // score, rank and event chip stack in one column so they never overlap
+    const left = el('div.hud-left', {}, this.pointsEl, this.rank, this.eventEl);
+    this.root.append(this.meter, this.crosshair, left, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
     onTap(this.pauseBtn, onPause);
     parent.append(this.root);
     this.show(false);

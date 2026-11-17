@@ -469,3 +469,24 @@ button { font-family: var(--font); }
 .btn.price.on { background: transparent; color: var(--good); box-shadow: none; border: 1px solid var(--good); cursor: default; }
 .btn.price.short { background: rgba(255, 255, 255, 0.08); color: var(--muted); box-shadow: none; cursor: not-allowed; }
 .btn.price.short small { font-size: 13px; font-weight: 800; }
+
+/* ------------------------------------------------------------------ no cut-off text on narrow screens */
+.toast, .shout {
+  white-space: normal; width: max-content; max-width: min(92vw, 1000px); text-align: center; line-height: 1.08;
+  overflow-wrap: break-word;
+}
+.toast.small { max-width: min(88vw, 760px); }
+.prompt { white-space: normal; width: max-content; max-width: 90vw; text-align: center; }
+.meter .mlabel { max-width: 92vw; overflow: hidden; text-overflow: ellipsis; font-size: clamp(13px, 3.4vw, 17px); }
+
+/* ------------------------------------------------------------------ top-left column (score, rank, event) */
+.hud-left {
+  position: absolute; top: calc(10px + var(--safe-t)); left: calc(12px + var(--safe-l));
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px; max-width: 220px;
+}
+.hud-left .points, .hud-left .rank, .hud-left .event-chip { position: static; }
+.hud-left .rank { padding-left: 2px; line-height: 1.2; }
+.hud-left .event-chip { line-height: 1.2; }
+/* keep the objective clear of the left column and the pause button */
+.objective { max-width: min(560px, max(34vw, calc(100vw - 500px))); }
+.stat { max-width: min(560px, max(34vw, calc(100vw - 500px))); text-align: center; }
