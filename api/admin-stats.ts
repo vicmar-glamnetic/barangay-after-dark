@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { json, phDay, visitsDb } from './_visits-db';
+import { json, phDay, visitsDb } from './_visits-db.js';
 
 /*
  * GET /api/admin-stats?days=30   header: x-admin-key: <ADMIN_KEY>

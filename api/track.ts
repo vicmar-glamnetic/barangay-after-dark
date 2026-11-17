@@ -1,4 +1,4 @@
-import { json, phDay, visitsDb } from './_visits-db';
+import { json, phDay, visitsDb } from './_visits-db.js';
 
 /*
  * POST /api/track { pid, ref, device, lang }
