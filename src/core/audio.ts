@@ -65,6 +65,76 @@ export class AudioSys {
 
     this.noise = this.makeNoise(2);
     this.startAmbience();
+    this.primeVoice();
+  }
+
+  // ---------------------------------------------------------------- voice (text to speech)
+
+  private voices: SpeechSynthesisVoice[] = [];
+
+  /** Pick voices that read Tagalog words well: Filipino first, then Spanish / Indonesian, then anything. */
+  private pickVoices(): void {
+    const ss = window.speechSynthesis;
+    if (!ss) return;
+    const all = ss.getVoices();
+    if (!all.length) return;
+    for (const pref of ['fil', 'tl', 'es', 'id', 'ms', 'it']) {
+      const v = all.filter((x) => x.lang.toLowerCase().replace('_', '-').startsWith(pref));
+      if (v.length) {
+        this.voices = v;
+        return;
+      }
+    }
+    this.voices = all.filter((x) => x.default).concat(all).slice(0, 3);
+  }
+
+  /** iOS only lets speech start inside a user gesture: say nothing once during unlock. */
+  private primeVoice(): void {
+    const ss = window.speechSynthesis;
+    if (!ss) return;
+    try {
+      this.pickVoices();
+      ss.onvoiceschanged = () => this.pickVoices();
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      ss.speak(u);
+    } catch {
+      /* no speech on this browser */
+    }
+  }
+
+  /**
+   * Shout a line with a kid-like voice ("Kaliwa!"). Cuts off the previous
+   * line so hints never queue up behind each other.
+   */
+  say(text: string, opts: { pitch?: number; rate?: number; interrupt?: boolean } = {}): void {
+    const ss = window.speechSynthesis;
+    if (!ss || this.volume <= 0 || !this.live) return;
+    try {
+      if (!this.voices.length) this.pickVoices();
+      if (opts.interrupt !== false) ss.cancel();
+      const u = new SpeechSynthesisUtterance(text.trim());
+      const v = this.voices[Math.floor(Math.random() * this.voices.length)];
+      if (v) {
+        u.voice = v;
+        u.lang = v.lang;
+      } else u.lang = 'fil-PH';
+      u.pitch = opts.pitch ?? 1.5 + Math.random() * 0.3;
+      u.rate = opts.rate ?? 1.15;
+      u.volume = Math.min(1, this.volume * 1.1);
+      ss.speak(u);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Stop any line being spoken (leaving a game). */
+  hush(): void {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* ignore */
+    }
   }
 
   suspend(): void {

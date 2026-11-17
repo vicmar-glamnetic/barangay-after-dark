@@ -14,7 +14,17 @@ import type { HubLayout } from './types';
  *      Pressing outside the green, or wobbling too long, and you fall.
  *   3. At langit you turn around. On the way back you bend down to pick the
  *      pamato up from the square before it (same meter), then hop out.
- * Clear squares 1 to 8 to win. 3 lives. +10 per square, +10 per life left.
+ * Clear squares 1 to 8 to win. 3 lives. +10 per square, +10 per life left,
+ * +1 per PERFECT hop (marker in the middle of the green).
+ *
+ * Made friendly on purpose:
+ *  - the target square glows, the square to skip is marked red, and a ring
+ *    shows where the next hop lands
+ *  - the power meter shows a green zone for the distance to the target, the
+ *    landing ring turns green when the toss will count, and a toss a little
+ *    off the square still counts (aim assist)
+ *  - the first missed toss on each square is free
+ *  - pressing outside the green makes you wobble once before you fall
  */
 
 const X0 = 17.4; // grid start (front edge of square 1)
@@ -24,6 +34,15 @@ const LIVES = 3;
 const START = new THREE.Vector3(X0 - 0.9, 0, ZC);
 const FACE_FWD = -Math.PI / 2; // looking along +X
 const PITCH = -0.62;
+/** Seconds for the power marker to sweep 0 -> 1. */
+const POWER_SWEEP = 1.7;
+/** Toss distance = MIN_TOSS + power * TOSS_RANGE. */
+const MIN_TOSS = 0.6;
+const TOSS_RANGE = 6.0;
+/** A toss this close outside the target square is nudged in. */
+const ASSIST = 0.14;
+/** Max seconds you can stand on one foot before falling. */
+const STAND_MAX = 5;
 
 interface Cell {
   n: number; // 1..8, 9 = langit
@@ -110,6 +129,15 @@ export class Piko extends BaseGame {
   private standT = 0;
   private hops = 0;
   private fallT = 0;
+  /** Missed tosses on the current square (the first one is free). */
+  private tossMisses = 0;
+  /** Wobbled once at this stop already (the next miss is a fall). */
+  private wobbled = false;
+  private perfects = 0;
+  private targetGlow!: THREE.Mesh;
+  private skipGlow!: THREE.Mesh;
+  private nextRing!: THREE.Mesh;
+  private glowT = 0;
 
   protected onAttach(): void {
     const { scene } = this.ctx;
@@ -164,11 +192,37 @@ export class Piko extends BaseGame {
     this.arc.frustumCulled = false;
     this.arc.visible = false;
     this.marker = new THREE.Mesh(
-      new THREE.RingGeometry(0.08, 0.12, 18).rotateX(-Math.PI / 2),
+      new THREE.RingGeometry(0.1, 0.16, 20).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, depthWrite: false, fog: false }),
     );
     this.marker.visible = false;
     scene.add(this.arc, this.marker);
+
+    // guidance: glowing target square, red skip square, ring on the next landing spot
+    const quad = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    this.targetGlow = new THREE.Mesh(quad, new THREE.MeshBasicMaterial({ color: 0x06d6a0, transparent: true, opacity: 0.35, depthWrite: false, fog: false }));
+    this.skipGlow = new THREE.Mesh(quad, new THREE.MeshBasicMaterial({ color: 0xff5d73, transparent: true, opacity: 0.3, depthWrite: false, fog: false }));
+    this.nextRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.2, 0.27, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9, depthWrite: false, fog: false }),
+    );
+    for (const m of [this.targetGlow, this.skipGlow, this.nextRing]) {
+      m.visible = false;
+      m.renderOrder = 2;
+      scene.add(m);
+    }
+  }
+
+  /** Put a glow quad over a cell. */
+  private cover(m: THREE.Mesh, c: Cell | undefined): void {
+    m.visible = !!c;
+    if (!c) return;
+    m.position.set((c.x0 + c.x1) / 2, 0.028, (c.z0 + c.z1) / 2);
+    m.scale.set(c.x1 - c.x0 - 0.04, 1, c.z1 - c.z0 - 0.04);
+  }
+
+  private hideGuides(): void {
+    this.targetGlow.visible = this.skipGlow.visible = this.nextRing.visible = false;
   }
 
   // ================================================================== lifecycle
@@ -179,6 +233,8 @@ export class Piko extends BaseGame {
     this.target = 1;
     this.lives = LIVES;
     this.score = 0;
+    this.perfects = 0;
+    this.tossMisses = 0;
     player.moveEnabled = false;
     touch.setActionLabel('Hop');
     touch.setJumpVisible(false);
@@ -192,6 +248,7 @@ export class Piko extends BaseGame {
     this.phase = 'done';
     this.pamato.visible = false;
     this.arc.visible = this.marker.visible = false;
+    this.hideGuides();
     player.moveEnabled = true;
     player.lookEnabled = true;
     touch.setActionLabel('Bato');
@@ -208,15 +265,44 @@ export class Piko extends BaseGame {
     player.lookEnabled = true;
     player.teleport(START.x, 0, START.z, FACE_FWD, -0.45);
     hud.setObjective(
-      `Ihagis ang pamato sa ${this.target}! ` + (isTouch() ? 'Pindutin nang matagal ang Hop, bitawan para ihagis.' : 'Pindutin nang matagal ang click, bitawan para ihagis.'),
+      `1/3  Ihagis ang pamato sa kahong ${this.target} (berde). ` +
+        (isTouch() ? 'Pindutin nang matagal ang Hop, bitawan kapag nasa berde ang guhit.' : 'Pindutin nang matagal ang click, bitawan kapag nasa berde ang guhit.'),
     );
     hud.setMeter(null);
+    this.hideGuides();
+    this.cover(this.targetGlow, CELLS.find((c) => c.n === this.target));
+  }
+
+  /** Power range (0..1) that lands in the target square along the current aim. */
+  private targetZone(): [number, number] {
+    const c = CELLS.find((x) => x.n === this.target)!;
+    const p = this.ctx.player.position;
+    const near = Math.hypot(c.x0 - ASSIST * 0.5 - p.x, (c.z0 + c.z1) / 2 - p.z);
+    const far = Math.hypot(c.x1 + ASSIST * 0.5 - p.x, (c.z0 + c.z1) / 2 - p.z);
+    return [THREE.MathUtils.clamp((near - MIN_TOSS) / TOSS_RANGE, 0, 1), THREE.MathUtils.clamp((far - MIN_TOSS) / TOSS_RANGE, 0, 1)];
+  }
+
+  /**
+   * Where a toss really lands: inside the target square (nudged in when it is
+   * only a little off), or the raw point. ok = it counts.
+   */
+  private judgePoint(p: THREE.Vector3): { at: THREE.Vector3; cell: Cell | null; ok: boolean } {
+    const t = CELLS.find((c) => c.n === this.target)!;
+    const dx = Math.max(t.x0 - p.x, 0, p.x - t.x1);
+    const dz = Math.max(t.z0 - p.z, 0, p.z - t.z1);
+    const m = 0.1; // keep the stone clear of the chalk lines
+    if (Math.hypot(dx, dz) <= ASSIST) {
+      const at = new THREE.Vector3(THREE.MathUtils.clamp(p.x, t.x0 + m, t.x1 - m), p.y, THREE.MathUtils.clamp(p.z, t.z0 + m, t.z1 - m));
+      return { at, cell: t, ok: true };
+    }
+    const cell = CELLS.find((c) => p.x >= c.x0 && p.x <= c.x1 && p.z >= c.z0 && p.z <= c.z1) ?? null;
+    return { at: p.clone(), cell, ok: false };
   }
 
   // ================================================================== frame
 
   update(dt: number): void {
-    const { input, hud, player } = this.ctx;
+    const { input, hud, player, audio } = this.ctx;
     if (this.phase === 'done') {
       this.battleCheck();
       return;
@@ -231,7 +317,7 @@ export class Piko extends BaseGame {
             this.power = 0;
             this.powerDir = 1;
           }
-          this.power += (this.powerDir * dt) / 1.1;
+          this.power += (this.powerDir * dt) / POWER_SWEEP;
           if (this.power >= 1) {
             this.power = 1;
             this.powerDir = -1;
@@ -239,13 +325,14 @@ export class Piko extends BaseGame {
             this.power = 0;
             this.powerDir = 1;
           }
-          hud.setPower(this.power);
+          const [z0, z1] = this.targetZone();
+          hud.setMeter(this.power, z0, z1, 'Lakas: bitawan sa berde');
           this.previewToss();
         } else if (this.aiming) {
           this.aiming = false;
-          hud.setPower(null);
+          hud.setMeter(null);
           this.arc.visible = this.marker.visible = false;
-          this.tossTo.copy(this.landingPoint());
+          this.tossTo.copy(this.judgePoint(this.landingPoint()).at);
           this.tossFrom.set(player.position.x, 1.0, player.position.z);
           this.tossT = 0;
           this.pamato.visible = true;
@@ -270,29 +357,57 @@ export class Piko extends BaseGame {
       }
       case 'stand': {
         const stop = this.stops[this.stopI];
-        // balance meter: faster as you go and at higher squares
-        const speed = 2.3 + this.hops * 0.1 + this.target * 0.18;
+        // balance meter: gentle at first, a little faster at higher squares
+        const speed = 1.9 + this.hops * 0.05 + this.target * 0.12 + (this.wobbled ? 0.5 : 0);
         this.swayPhase += dt * speed;
         this.sway = 0.5 + 0.5 * Math.sin(this.swayPhase);
-        const half = Math.max(0.1, 0.17 - this.target * 0.008);
+        const half = Math.max(0.15, 0.24 - this.target * 0.01);
         const pickup = stop?.pickup && this.pamato.visible;
-        hud.setMeter(this.sway, 0.5 - half, 0.5 + half, pickup ? 'Pulutin ang pamato!' : this.stopI === -1 ? 'Hop!' : 'Balanse... Hop!');
         this.standT += dt;
-        if (this.standT > 3.2) {
-          this.fail('Natumba ka!');
+        const hurry = this.standT > STAND_MAX - 1.6;
+        const key = this.ctx.isTouch() ? 'Tap' : 'Click';
+        const label = hurry ? 'Bilisan! Nanginginig na!' : pickup ? `Pulutin ang pamato! (${key})` : this.wobbled ? 'Ingat! Isa pang mali, tumba.' : `${key} sa berde para mag-hop`;
+        hud.setMeter(this.sway, 0.5 - half, 0.5 + half, label);
+        // the ring shows where this press takes you (or the pamato to pick up)
+        const nxt = pickup ? this.pamato.position : this.stops[this.stopI + 1]?.pos;
+        this.nextRing.visible = !!nxt;
+        if (nxt) {
+          this.glowT += dt;
+          this.nextRing.position.set(nxt.x, 0.035, nxt.z);
+          this.nextRing.scale.setScalar(pickup ? 0.6 : 1 + Math.sin(this.glowT * 6) * 0.08);
+        }
+        if (this.standT > STAND_MAX) {
+          this.fail('Natumba ka! Matagal kang nakatayo.');
           break;
         }
         if (press) {
-          if (Math.abs(this.sway - 0.5) > half) {
+          const off = Math.abs(this.sway - 0.5);
+          if (off > half) {
+            if (!this.wobbled) {
+              // one free wobble per stop
+              this.wobbled = true;
+              this.standT = Math.min(this.standT, STAND_MAX - 2.2);
+              hud.toast('Muntik na!', 'small', 700);
+              audio.play('whiff', { vol: 0.8 });
+              break;
+            }
             this.fail(pickup ? 'Nahulog ka habang pumupulot!' : 'Natapakan mo ang linya!');
             break;
+          }
+          if (off < half * 0.3) {
+            this.perfects++;
+            this.score += 1;
+            hud.toast('PERFECT! +1', 'good', 500);
+            audio.play('perfect', { vol: 0.8 });
           }
           if (pickup) {
             this.pamato.visible = false;
             this.ctx.audio.play('pickup');
             hud.toast('Napulot!', 'small', 600);
             this.standT = 0;
+            this.wobbled = false;
             this.swayPhase = Math.random() * 6;
+            this.skipGlow.visible = false;
             break;
           }
           this.hopTo(this.stopI + 1);
@@ -309,6 +424,8 @@ export class Piko extends BaseGame {
         break;
       }
       case 'turn': {
+        if (this.turnT === 0)
+          hud.setObjective(`3/3  Pabalik! Pulutin ang pamato mula sa kahong katabi nito, tapos lumabas.`);
         this.turnT = Math.min(1, this.turnT + dt / 0.5);
         this.yaw = this.turnFrom + Math.PI * (this.turnT * this.turnT * (3 - 2 * this.turnT));
         const p = this.stops[this.stopI].pos;
@@ -336,7 +453,7 @@ export class Piko extends BaseGame {
     cam.getWorldDirection(f);
     f.y = 0;
     f.normalize();
-    const dist = 0.6 + this.power * 6.0;
+    const dist = MIN_TOSS + this.power * TOSS_RANGE;
     return new THREE.Vector3(this.ctx.player.position.x + f.x * dist, 0.015, this.ctx.player.position.z + f.z * dist);
   }
 
@@ -344,7 +461,8 @@ export class Piko extends BaseGame {
     const from = new THREE.Vector3(this.ctx.player.position.x, 1.0, this.ctx.player.position.z);
     const to = this.landingPoint();
     let n = 0;
-    for (let i = 1; i < 24; i++) {
+    // only the far half of the arc: the near dots sit right in front of the camera and hide the grid
+    for (let i = 12; i < 24; i++) {
       const k = i / 24;
       _dummy.position.lerpVectors(from, to, k);
       _dummy.position.y = THREE.MathUtils.lerp(1.0, 0.015, k) + Math.sin(k * Math.PI) * 0.9;
@@ -353,22 +471,38 @@ export class Piko extends BaseGame {
     }
     this.arc.count = n;
     this.arc.instanceMatrix.needsUpdate = true;
-    this.arc.visible = true;
+    // the arc reads as "farther" than it lands from this camera angle; the colored ring is clearer
+    this.arc.visible = false;
     this.marker.position.set(to.x, 0.03, to.z);
     this.marker.visible = true;
+    // green ring = this toss will count
+    (this.marker.material as THREE.MeshBasicMaterial).color.set(this.judgePoint(to).ok ? 0x06d6a0 : 0xff5d73);
   }
 
   private judgeToss(): void {
-    const p = this.tossTo;
-    const cell = CELLS.find((c) => p.x >= c.x0 && p.x <= c.x1 && p.z >= c.z0 && p.z <= c.z1) ?? null;
-    if (!cell) return this.fail('Labas sa kahon ang pamato!');
-    const edge = Math.min(p.x - cell.x0, cell.x1 - p.x, p.z - cell.z0, cell.z1 - p.z);
-    if (edge < 0.06) return this.fail('Sa linya ang pamato!');
-    if (cell.n !== this.target) return this.fail(`Sa ${cell.n === 9 ? 'langit' : cell.n} napunta, hindi sa ${this.target}!`);
+    const j = this.judgePoint(this.tossTo);
+    if (!j.ok) {
+      const msg = !j.cell ? 'Labas sa kahon ang pamato!' : `Sa ${j.cell.n === 9 ? 'langit' : j.cell.n} napunta, hindi sa ${this.target}!`;
+      this.tossMisses++;
+      if (this.tossMisses === 1) {
+        // first miss on each square is free
+        this.ctx.hud.toast(`${msg} Isa pa, libre!`, 'small', 1400);
+        this.ctx.audio.play('thud', { vol: 0.5 });
+        this.phase = 'fall';
+        this.fallT = 1.1;
+        return;
+      }
+      return this.fail(msg);
+    }
+    const cell = j.cell!;
     this.landedCell = cell;
     this.ctx.hud.toast('Pasok!', 'good', 700);
     this.buildStops();
-    this.ctx.hud.setObjective(`Mag-hop! Laktawan ang ${this.target}. Pindutin kapag nasa berde.`);
+    this.ctx.hud.setObjective(
+      `2/3  Mag-hop papuntang LANGIT at pabalik. Laktawan ang ${this.target} (pula). ${this.ctx.isTouch() ? 'Tap' : 'Click o Space'} kapag nasa berde ang guhit.`,
+    );
+    this.targetGlow.visible = false;
+    this.cover(this.skipGlow, cell);
     this.stopI = -1;
     this.yaw = FACE_FWD;
     this.ctx.player.teleport(START.x, 0, START.z, FACE_FWD, PITCH);
@@ -407,7 +541,9 @@ export class Piko extends BaseGame {
   private standAt(): void {
     this.phase = 'stand';
     this.standT = 0;
-    this.swayPhase = Math.random() * 6;
+    this.wobbled = false;
+    // start the marker away from the green so the first press is never a freebie
+    this.swayPhase = Math.random() < 0.5 ? -Math.PI / 2 : Math.PI / 2;
   }
 
   private hopTo(i: number): void {
@@ -417,6 +553,7 @@ export class Piko extends BaseGame {
     this.hopT = 0;
     this.phase = 'hop';
     this.ctx.hud.setMeter(null);
+    this.nextRing.visible = false;
     this.ctx.audio.play('step', { vol: 1.2 });
   }
 
@@ -454,6 +591,7 @@ export class Piko extends BaseGame {
     }
     hud.toast(`Square ${this.target}, tapos!`, 'good', 1000);
     this.target++;
+    this.tossMisses = 0;
     this.battleReport(this.score, false);
     this.phase = 'fall';
     this.fallT = 0.9;
@@ -467,6 +605,7 @@ export class Piko extends BaseGame {
     audio.play('thud');
     this.pamato.visible = this.pamato.visible && this.phase === 'toss';
     this.arc.visible = this.marker.visible = false;
+    this.hideGuides();
     player.teleport(player.position.x, 0, player.position.z, this.yaw, 0.1);
     this.phase = 'fall';
     this.fallT = 1.4;
@@ -476,9 +615,10 @@ export class Piko extends BaseGame {
   private endRun(won: boolean): void {
     this.phase = 'done';
     this.ctx.hud.setMeter(null);
+    this.hideGuides();
     this.ctx.hud.setObjective(this.multiplayer ? 'Tapos ka na. Hinihintay ang iba...' : '');
     const cleared = won ? 8 : this.target - 1;
-    this.battleReport(this.score, true, won, [`Squares: ${cleared}/8`, `Buhay na natira: ${Math.max(0, this.lives)}/${LIVES}`]);
+    this.battleReport(this.score, true, won, [`Squares: ${cleared}/8`, `Buhay na natira: ${Math.max(0, this.lives)}/${LIVES}`, `Perfect na hop: ${this.perfects}`]);
   }
 
   protected finishMine(mine: EndRow, won: boolean, ranking: string[]): void {

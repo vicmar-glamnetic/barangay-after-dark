@@ -11,7 +11,7 @@ export const STAR_THRESHOLDS: Record<string, [number, number, number]> = {
   patintero: [25, 80, 140],
   taguan: [25, 75, 140],
   langitLupa: [40, 80, 150],
-  piko: [20, 50, 100],
+  piko: [25, 70, 140],
   luksongBaka: [30, 100, 200],
   holen: [20, 40, 70],
   pukpokPalayok: [40, 120, 200],

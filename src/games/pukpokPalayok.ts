@@ -55,6 +55,7 @@ export class PukpokPalayok extends BaseGame {
   private spinFrom = 0;
   private spinTo = 0;
   private hintT = 0;
+  private lastHint = '';
   private rattleT = 0;
 
   protected onAttach(): void {
@@ -115,6 +116,7 @@ export class PukpokPalayok extends BaseGame {
   }
 
   stop(): void {
+    this.ctx.audio.hush();
     const { player, hud, touch, hand, overlays } = this.ctx;
     this.phase = 'done';
     overlays.blind(false);
@@ -157,6 +159,7 @@ export class PukpokPalayok extends BaseGame {
     overlays.blind(true);
     overlays.shout(`Palayok ${this.round}/${ROUNDS}: Ikot!`, 1800);
     audio.play('cheer');
+    audio.say('Ikot! Ikot! Ikot!', { rate: 1.05 });
     hud.setObjective('Nakapiring ka! Sundan ang sigaw ng mga bata at ang kalansing ng kendi.');
     this.phase = 'spin';
     this.timer = 0;
@@ -189,6 +192,7 @@ export class PukpokPalayok extends BaseGame {
           this.hintT = 0.4;
           this.rattleT = 0.2;
           overlays.shout('Takbo! Hanapin!', 900);
+          audio.say('Takbo! Hanapin!');
         }
         break;
       }
@@ -203,9 +207,13 @@ export class PukpokPalayok extends BaseGame {
         // the kids shout directions
         this.hintT -= dt;
         if (this.hintT <= 0) {
-          overlays.shout(this.hint(), 950);
+          const h = this.hint();
+          overlays.shout(h, 950);
           audio.play('tick', { vol: 0.4 });
-          this.hintT = 1.3;
+          // the kids yell it out loud; repeat lines get a little more urgent
+          audio.say(h, { rate: h === this.lastHint ? 1.3 : 1.15 });
+          this.lastHint = h;
+          this.hintT = 1.4;
         }
         if (input.pressed('action') || input.tapPressed) this.swing();
         else if (this.time <= 0) this.roundOver(false, 'Ubos ang oras!');
@@ -267,6 +275,7 @@ export class PukpokPalayok extends BaseGame {
     } else if (this.swings <= 0) this.roundOver(false, 'Mintis! Ubos na ang hampas.');
     else {
       this.ctx.overlays.shout('Mintis!', 700);
+      this.ctx.audio.say('Mintis! Ulit!');
       this.phase = 'play';
     }
   }
@@ -275,6 +284,7 @@ export class PukpokPalayok extends BaseGame {
     const { overlays, hud, audio, player } = this.ctx;
     overlays.blind(false);
     hud.toast(msg, hit ? 'good' : 'bad', 1500);
+    audio.say(hit ? 'Basag! Ang galing!' : msg.startsWith('Ubos ang oras') ? 'Ubos na ang oras!' : 'Sayang! Mintis!', { pitch: 1.6 });
     if (!hit) {
       audio.play('lose');
       // show where it was
