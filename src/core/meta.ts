@@ -203,10 +203,17 @@ export interface Rival {
   readonly taunts: string[];
   readonly lose: string;
   readonly win: string;
+  /** Both languages, for voice-over: [filipino, english]. */
+  tauntPairs: [string, string][];
+  losePair: [string, string];
+  winPair: [string, string];
 }
 
 const rival = (name: string, taunts: [string, string][], lose: [string, string], win: [string, string]): Rival => ({
   name,
+  tauntPairs: taunts,
+  losePair: lose,
+  winPair: win,
   get taunts() { return taunts.map(([f, e]) => L(f, e)); },
   get lose() { return L(lose[0], lose[1]); },
   get win() { return L(win[0], win[1]); },

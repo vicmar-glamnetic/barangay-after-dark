@@ -90,7 +90,7 @@ export class GameManager {
     this.store = new NpcGroup(base.scene, STORE_SPOT, [{ x: 7.05, z: -7.85, faceX: 6.6, faceZ: -5, mode: 'wave' }], new THREE.Vector3(6.6, 3.55, -7.6), base.blobs, base.groundAt);
     this.store.kids[0].root.scale.setScalar(1.3); // Aling Nena is a grown-up
     this.labelStore();
-    this.life = new BarangayLife(base.scene, base.blobs);
+    this.life = new BarangayLife(base.scene, base.blobs, base.audio);
     for (const g of this.games) {
       const L = g.layout;
       const group = new NpcGroup(base.scene, L.spot, L.kids, L.labelPos, base.blobs, base.groundAt);
@@ -314,8 +314,10 @@ export class GameManager {
     const now = performance.now();
     if (!rv || lvl >= RIVAL_MAX || now - (this.tauntAt.get(near.id) ?? -1e9) < 40000) return;
     this.tauntAt.set(near.id, now);
-    const line = rv.taunts[Math.floor(Math.random() * rv.taunts.length)];
-    this.ctx.hud.toast(`${rv.name}: "${line}"`, 'small', 2400);
+    const i = Math.floor(Math.random() * rv.tauntPairs.length);
+    const [fil, en] = rv.tauntPairs[i];
+    this.ctx.hud.toast(`${rv.name}: "${L(fil, en)}"`, 'small', 2400);
+    this.ctx.audio.speak(near.id === 'sungka' ? 'lola' : 'kid', fil, en);
   }
 
   postPhysics(dt: number): void {
@@ -539,6 +541,9 @@ export class GameManager {
           ? L(`Talo mo na si ${rv.name} sa lahat ng level! "${rv.lose}" +${pay} Barya`, `You beat ${rv.name} at every level! "${rv.lose}" +${pay} Barya`)
           : L(`Talo mo si ${rv.name} (${target})! "${rv.lose}" +${pay} Barya  ·  Susunod: ${rivalTarget(g.id, lvl + 1)}`, `You beat ${rv.name} (${target})! "${rv.lose}" +${pay} Barya  ·  Next: ${rivalTarget(g.id, lvl + 1)}`);
       } else rivalMsg = L(`${rv.name}: "${rv.win}" Kailangan mo ng ${target}.`, `${rv.name}: "${rv.win}" You need ${target} to beat them.`);
+      // the rival says it out loud when the results card comes up
+      const [vf, ve] = rivalBeaten ? rv.losePair : rv.winPair;
+      window.setTimeout(() => this.ctx.audio.speak(g.id === 'sungka' ? 'lola' : 'kid', vf, ve), 1500);
     }
     // torneo standings (every client computes the same totals from the host's rows)
     let tourLines: string[] | undefined;

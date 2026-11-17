@@ -168,7 +168,7 @@ export class PukpokPalayok extends BaseGame {
     overlays.blind(true);
     overlays.shout(L(`Palayok ${this.round}/${ROUNDS}: Ikot!`, `Pot ${this.round}/${ROUNDS}: Spin!`), 1800);
     audio.play('cheer');
-    audio.say(L('Ikot! Ikot! Ikot!', 'Spin! Spin! Spin!'), { rate: 1.05 });
+    audio.speak('kid', 'Ikot! Ikot! Ikot!', 'Spin! Spin! Spin!', { interrupt: true, rate: 1.05 });
     hud.setObjective(L('Nakapiring ka! Sundan ang sigaw ng mga bata at ang kalansing ng kendi.', "You're blindfolded! Follow the kids' shouts and the rattle of candy."));
     this.phase = 'spin';
     this.timer = 0;
@@ -201,7 +201,7 @@ export class PukpokPalayok extends BaseGame {
           this.hintT = 0.4;
           this.rattleT = 0.2;
           overlays.shout(L('Takbo! Hanapin!', 'Go! Find it!'), 900);
-          audio.say(L('Takbo! Hanapin!', 'Go! Find it!'));
+          audio.speak('kid', 'Takbo! Hanapin!', 'Go! Find it!', { interrupt: true });
         }
         break;
       }
@@ -221,7 +221,7 @@ export class PukpokPalayok extends BaseGame {
           overlays.shout(isEn() ? `${h.en} (${h.fil})` : h.fil, 950);
           audio.play('tick', { vol: 0.4 });
           // the kids yell it out loud; repeat lines get a little more urgent
-          audio.say(L(h.fil, h.en), { rate: h.fil === this.lastHint ? 1.3 : 1.15 });
+          audio.speak('kid', h.fil, h.en, { interrupt: true, rate: h.fil === this.lastHint ? 1.3 : 1.15 });
           this.lastHint = h.fil;
           this.hintT = 1.4;
         }
@@ -286,7 +286,7 @@ export class PukpokPalayok extends BaseGame {
     } else if (this.swings <= 0) this.roundOver(false, L('Mintis! Ubos na ang hampas.', 'Missed! Out of swings.'));
     else {
       this.ctx.overlays.shout(L('Mintis!', 'Missed!'), 700);
-      this.ctx.audio.say(L('Mintis! Ulit!', 'Missed! Try again!'));
+      this.ctx.audio.speak('kid', 'Mintis! Ulit!', 'Missed! Try again!', { interrupt: true });
       this.phase = 'play';
     }
   }
@@ -295,7 +295,8 @@ export class PukpokPalayok extends BaseGame {
     const { overlays, hud, audio, player } = this.ctx;
     overlays.blind(false);
     hud.toast(msg, hit ? 'good' : 'bad', 1500);
-    audio.say(hit ? L('Basag! Ang galing!', 'Smashed! Amazing!') : this.time <= 0 ? L('Ubos na ang oras!', "Time's up!") : L('Sayang! Mintis!', 'Aww, missed!'), { pitch: 1.6 });
+    const [vf, ve] = hit ? ['Basag! Ang galing!', 'Smashed! Amazing!'] : this.time <= 0 ? ['Ubos na ang oras!', "Time's up!"] : ['Sayang! Mintis!', 'Aww, missed!'];
+    audio.speak('kid', vf, ve, { interrupt: true });
     if (!hit) {
       audio.play('lose');
       // show where it was

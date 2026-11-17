@@ -58,6 +58,8 @@ export interface MenuCallbacks {
   onShop: () => void;
   /** An item was just bought (sound, badge check). */
   onPurchase?: (it: ShopItem) => void;
+  /** A character says a line out loud (voice-over). */
+  onSay?: (who: 'tindera', fil: string, en: string) => void;
 }
 
 /**
@@ -310,7 +312,8 @@ export class Menus {
       body: [
         section(L('Wika at tunog', 'Language & sound'),
           row(L('Wika', 'Language'), this.langSwitch(() => this.showSettings(back))),
-          row('Volume', vol)),
+          row('Volume', vol),
+          row(L('Boses ng mga tauhan', 'Character voices'), onOff(() => s.voices, (v) => (s.voices = v)))),
         section(L('Kontrol', 'Controls'),
           row(el('span', {}, document.createTextNode(L('Bilis ng tingin ', 'Look speed ')), sensVal), sens),
           row(L('Baligtad na Y', 'Invert Y'), onOff(() => s.invertY, (v) => (s.invertY = v)))),
@@ -491,12 +494,16 @@ export class Menus {
     };
 
     // ---- header: who's talking, wallet, close
-    const lines = [
-      L('Ano sa iyo, iho/iha?', 'What can I get you, dear?'),
-      L('Bili na, bili na! Bagong dating ang tsinelas!', 'Come, come! New flip-flops just arrived!'),
-      L('Pampalamig muna bago maglaro!', 'Something cold before you play?'),
+    const lines: [string, string][] = [
+      ['Ano sa iyo, iho? Iha?', 'What can I get you, dear?'],
+      ['Bili na, bili na! Bagong dating ang tsinelas!', 'Come, come! New flip-flops just arrived!'],
+      ['Pampalamig muna bago maglaro!', 'Something cold before you play?'],
     ];
-    const say = this.storeNote || (greet ? lines[Math.floor(Math.random() * lines.length)] : L('Salamat! Balik ka ha.', 'Thank you! Come back soon.'));
+    const pick = lines[Math.floor(Math.random() * lines.length)];
+    const thanks: [string, string] = ['Salamat! Balik ka ha.', 'Thank you! Come back soon.'];
+    const said = this.storeNote ? null : greet ? pick : thanks;
+    const say = this.storeNote || L(...(said ?? thanks));
+    if (said && greet) this.cb.onSay?.('tindera', said[0], said[1]);
     this.storeNote = '';
     const close = el('button.icon-btn.close', { text: '✕', attrs: { 'aria-label': L('Isara', 'Close') } });
     onTap(close, () => {

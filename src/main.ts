@@ -96,6 +96,7 @@ class App {
       onUiSound: () => this.audio.play('ui'),
       onFace: (face) => this.games?.session?.setFace(face),
       onSlipper: (i) => this.applySlipper(i),
+      onSay: (who, fil, en) => this.audio.speak(who, fil, en),
       bookInfo: () => {
         rollQuests(this.save.data);
         const d = this.games.daily();
@@ -228,6 +229,7 @@ class App {
     this.player.teleport(sp.pos.x, sp.pos.y, sp.pos.z, sp.yaw);
     this.physics.step(1 / 60);
     this.audio.setVolume(this.save.data.settings.volume);
+    this.audio.voicesOn = this.save.data.settings.voices;
     this.hud.setPoints(this.save.data.tropaPoints);
     this.hud.setRank(this.games.progressText());
     this.applySlipper(this.save.data.slipper);
@@ -326,6 +328,7 @@ class App {
       (this.r.scene.fog as THREE.FogExp2).density = s.quality === 'high' ? 0.022 : 0.026;
     }
     this.audio.setVolume(s.volume);
+    this.audio.voicesOn = s.voices;
   }
 
   private setTouchMode(touch: boolean): void {

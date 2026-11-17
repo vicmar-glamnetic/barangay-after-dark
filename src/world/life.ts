@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { L } from '../core/i18n';
+import type { AudioSys } from '../core/audio';
 import { Kid, type KidLook } from './npcs';
 import type { BlobShadows } from './shadows';
 import { FONT } from './textures';
@@ -64,7 +65,7 @@ export class BarangayLife {
   private talker = 0;
   private near = false;
 
-  constructor(private scene: THREE.Scene, blobs: BlobShadows) {
+  constructor(private scene: THREE.Scene, blobs: BlobShadows, private audio?: AudioSys) {
     // ---- the titas, standing around the chismisan table
     const spots: [number, number][] = [[-16.45, -6.55], [-14.55, -6.65], [-15.4, -5.5]];
     spots.forEach(([x, z], i) => {
@@ -197,7 +198,10 @@ export class BarangayLife {
         this.talkT = 3.2 + Math.random() * 1.2;
         for (const ti of this.titas) ti.bubble.visible = false;
         this.talker = (this.talker + 1 + Math.floor(Math.random() * 2)) % this.titas.length;
-        this.say(this.titas[this.talker]);
+        const ti = this.titas[this.talker];
+        this.say(ti);
+        // only voiced when you're really standing with them
+        if (Math.hypot(cam.x - CHISMIS.x, cam.z - CHISMIS.z) < 7) this.audio?.speak('tita', GOSSIP[ti.line][0], GOSSIP[ti.line][1], { vol: 0.7 });
       }
     }
 

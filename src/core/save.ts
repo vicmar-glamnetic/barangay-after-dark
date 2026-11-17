@@ -21,6 +21,8 @@ export interface Settings {
   glow: boolean;
   /** Send scores to the online leaderboard (name + score only). */
   onlineScores: boolean;
+  /** Characters speak their lines out loud (recorded clip if there is one, else the browser voice). */
+  voices: boolean;
 }
 
 export interface SaveData {
@@ -110,7 +112,7 @@ export class SaveStore {
       sorbetes: 0,
       sorbetesSlot: -1,
       boost: 0,
-      settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false, onlineScores: true },
+      settings: { sensitivity: 1, invertY: false, quality: this.defaultQuality, volume: 0.8, autoFps: true, showFps: false, glow: false, onlineScores: true, voices: true },
     };
   }
 
@@ -172,6 +174,7 @@ export class SaveStore {
       d.settings.showFps = s.showFps === true;
       d.settings.glow = s.glow === true;
       d.settings.onlineScores = s.onlineScores !== false;
+      d.settings.voices = s.voices !== false;
     }
     return d;
   }

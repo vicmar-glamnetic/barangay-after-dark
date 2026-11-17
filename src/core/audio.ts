@@ -18,6 +18,20 @@ export type Sfx =
 const _v = new THREE.Vector3();
 const _f = new THREE.Vector3();
 
+export type VoiceRole = 'kid' | 'tita' | 'lola' | 'vendor' | 'tindera';
+
+/** File-name slug for a spoken line: "Mag-ingat ka, baka..." -> "mag-ingat-ka-baka...". */
+export function voiceSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
 export class AudioSys {
   ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -142,6 +156,67 @@ export class AudioSys {
     } catch {
       /* ignore */
     }
+    this.clip?.pause();
+  }
+
+  // ---------------------------------------------------------------- character voice-over
+
+  /** Character voices on/off (Settings). */
+  voicesOn = true;
+  /** Recorded lines: lang -> slug -> file in public/voice/ (see public/voice/README.md). */
+  private pack: Record<string, Record<string, string>> | null = null;
+  private clip: HTMLAudioElement | null = null;
+  private lastLine = 0;
+
+  /** Load public/voice/manifest.json once (a missing file just means "no recordings yet"). */
+  private loadPack(): void {
+    if (this.pack) return;
+    this.pack = {};
+    fetch(new URL('voice/manifest.json', document.baseURI).toString())
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((m) => (this.pack = m && typeof m === 'object' ? (m as Record<string, Record<string, string>>) : {}))
+      .catch(() => {});
+  }
+
+  /**
+   * A character says a line: the recorded clip for it if one exists
+   * (public/voice/<lang>/<slug>.mp3 listed in manifest.json), otherwise the
+   * browser's voice tuned to the character. Never talks over another line
+   * unless interrupt is set (game hints).
+   */
+  speak(who: VoiceRole, fil: string, en: string, opts: { interrupt?: boolean; vol?: number; rate?: number } = {}): void {
+    // game hints (interrupt) always play; chatter respects the Character voices setting
+    if ((!this.voicesOn && !opts.interrupt) || this.volume <= 0 || !this.live) return;
+    this.loadPack();
+    const lang = getLang();
+    const text = lang === 'en' ? en : fil;
+    const busy = (this.clip && !this.clip.paused) || window.speechSynthesis?.speaking;
+    if (busy && !opts.interrupt) return;
+    if (performance.now() - this.lastLine < 400 && !opts.interrupt) return;
+    this.lastLine = performance.now();
+    const file = this.pack?.[lang]?.[voiceSlug(text)] ?? this.pack?.[lang]?.[voiceSlug(fil)];
+    if (file) {
+      this.clip?.pause();
+      try {
+        window.speechSynthesis?.cancel();
+      } catch {
+        /* ignore */
+      }
+      const a = new Audio(new URL(`voice/${file}`, document.baseURI).toString());
+      a.volume = Math.min(1, this.volume * (opts.vol ?? 1));
+      a.play().catch(() => {});
+      this.clip = a;
+      return;
+    }
+    const tune: Record<VoiceRole, { pitch: number; rate: number }> = {
+      kid: { pitch: 1.55, rate: 1.12 },
+      tita: { pitch: 1.15, rate: 1.0 },
+      lola: { pitch: 0.95, rate: 0.85 },
+      vendor: { pitch: 0.75, rate: 0.85 },
+      tindera: { pitch: 1.1, rate: 0.98 },
+    };
+    const t = tune[who];
+    this.say(text, { pitch: t.pitch + Math.random() * 0.1, rate: opts.rate ?? t.rate, interrupt: !!opts.interrupt });
   }
 
   suspend(): void {
@@ -488,7 +563,17 @@ export class AudioSys {
   /** Street vendors calling out somewhere in the barangay (spoken, low and far). */
   private vendorLoop(): void {
     const calls = ['Baluuut! Penoy! Baluuut!', 'Tahooo! Tahooo!', 'Puto! Kutsinta!', 'Pandesaaal! Mainit pa!', 'Binatog! Mais!'];
-    if (this.live) this.callOut(calls[Math.floor(Math.random() * calls.length)]);
+    if (this.live) {
+      const call = calls[Math.floor(Math.random() * calls.length)];
+      this.loadPack();
+      const file = this.voicesOn ? this.pack?.fil?.[voiceSlug(call)] : undefined;
+      if (file) {
+        // a recorded vendor call: far away, so quiet
+        const a = new Audio(new URL(`voice/${file}`, document.baseURI).toString());
+        a.volume = Math.min(1, this.volume * 0.35);
+        a.play().catch(() => {});
+      } else if (this.voicesOn) this.callOut(call);
+    }
     this.later(55000 + Math.random() * 50000, () => this.vendorLoop());
   }
 
