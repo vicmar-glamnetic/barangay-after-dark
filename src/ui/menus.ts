@@ -212,7 +212,7 @@ export class Menus {
     return el('div.wallet-row', {},
       el('span.wallet-pill', {}, el('i.coin'), document.createTextNode(`${d.barya} Barya`)),
       el('span.wallet-pill.tp', { text: `★ ${d.tropaPoints} Tropa Points` }),
-      el('span.wallet-pill.rank', { text: RANKS[rankIndex(d.tropaPoints)].name }));
+      el('span.wallet-pill.rnk', { text: RANKS[rankIndex(d.tropaPoints)].name }));
   }
 
   // --------------------------------------------------------------- pause
@@ -830,7 +830,7 @@ export class Menus {
       onClose: o.onClose,
       body: [howTo, o.lockedMsg ? el('p', { text: o.lockedMsg }) : null, profile],
       foot: [
-        o.canSolo ? this.button(L('▶  Maglaro mag-isa', '▶  Play solo'), '.big', o.onSolo) : null,
+        o.canSolo ? this.button(L('▶  Maglaro mag-isa', '▶  Play solo'), '.wide', o.onSolo) : null,
         el('div.btns', {},
           o.inLobby
             ? this.button(L('Laruin ito sa lobby', 'Play this in the lobby'), '.alt', o.onCreate)
