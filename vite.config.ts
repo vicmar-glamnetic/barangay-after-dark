@@ -9,6 +9,8 @@ export default defineConfig({
     target: 'es2020',
     chunkSizeWarningLimit: 3000,
     rollupOptions: {
+      // the game, plus the /admin visits dashboard
+      input: { main: 'index.html', admin: 'admin/index.html' },
       output: {
         manualChunks: {
           three: ['three'],

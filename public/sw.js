@@ -1,8 +1,9 @@
 // Minimal offline service worker.
 // - Page navigations: network first, fall back to the cached shell (offline play).
 // - Same-origin assets: cache first (Vite file names are content-hashed).
-// Bump VERSION to drop old caches.
-const VERSION = 'hnk-v2';
+// - Never touches /api/ (live data: leaderboard, visit counter) or /admin.
+// Bump VERSION to drop old caches. (v3: v2 cached API responses by mistake.)
+const VERSION = 'hnk-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -19,6 +20,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // live data and the admin dashboard always go to the network
+  if (url.origin === self.location.origin && /\/(api|admin)(\/|$)/.test(url.pathname)) return;
 
   if (req.mode === 'navigate') {
     e.respondWith(

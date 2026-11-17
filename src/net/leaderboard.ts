@@ -52,3 +52,27 @@ export async function fetchTop(game: string, period: 'week' | 'all'): Promise<Bo
     return null;
   }
 }
+
+/**
+ * Count this visit for the /admin dashboard: once per browser session, live
+ * site only. Sends the random device id, the referring site's host name, the
+ * device type and the game language. No names, no IP addresses.
+ */
+export function trackVisit(lang: string, device: 'mobile' | 'tablet' | 'desktop'): void {
+  if (!import.meta.env.PROD) return;
+  try {
+    if (sessionStorage.getItem('hnk:visited') === '1') return;
+    sessionStorage.setItem('hnk:visited', '1');
+  } catch {
+    /* storage blocked: count it anyway */
+  }
+  let ref = '';
+  try {
+    ref = document.referrer ? new URL(document.referrer).hostname : '';
+  } catch {
+    /* ignore */
+  }
+  const body = JSON.stringify({ pid: devicePid(), ref, device, lang });
+  const url = new URL('api/track', document.baseURI).toString();
+  fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => {});
+}

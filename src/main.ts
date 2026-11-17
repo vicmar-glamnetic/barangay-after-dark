@@ -28,7 +28,8 @@ import { Traffic } from './world/traffic';
 import { FONT } from './world/textures';
 import { NightEvents } from './world/nightEvents';
 import { escapeInAppBrowser } from './ui/inAppEscape';
-import { L, onLang } from './core/i18n';
+import { L, getLang, onLang } from './core/i18n';
+import { trackVisit } from './net/leaderboard';
 
 type AppState = 'loading' | 'title' | 'play';
 const FAR_AWAY = new THREE.Vector3(0, 50, 0);
@@ -132,6 +133,7 @@ class App {
     });
     this.preventBrowserGestures();
     escapeInAppBrowser(this.ui);
+    trackVisit(getLang(), device.isMobile ? (Math.min(screen.width, screen.height) >= 700 ? 'tablet' : 'mobile') : 'desktop');
     onLang(() => {
       this.menus.refreshTitle();
       this.games?.onLanguage();
