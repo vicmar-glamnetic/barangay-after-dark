@@ -490,3 +490,61 @@ button { font-family: var(--font); }
 /* keep the objective clear of the left column and the pause button */
 .objective { max-width: min(560px, max(34vw, calc(100vw - 500px))); }
 .stat { max-width: min(560px, max(34vw, calc(100vw - 500px))); text-align: center; }
+
+/* ------------------------------------------------------------------ shared panel cards */
+.card.panel { padding: 0; display: flex; flex-direction: column; overflow: hidden; width: min(540px, 100%); }
+.panel-head { padding: 14px 18px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(14, 18, 44, 0.96); flex: none; }
+.panel-top { position: relative; display: flex; align-items: center; justify-content: center; min-height: 40px; }
+.panel-top h2 { margin: 0; padding: 0 44px; }
+.panel-top .close { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; font-size: 18px; }
+.panel-head .wallet-row { margin: 8px 0 10px; }
+.panel-head .seg.tabs { margin: 0 auto; }
+.panel-head .seg.tabs button { padding: 8px 14px 5px; font-size: 16px; }
+.panel-body { padding: 12px 18px 14px; overflow-y: auto; flex: 1 1 auto; text-align: left; touch-action: pan-y; }
+.panel-foot { padding: 10px 18px 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); background: rgba(14, 18, 44, 0.96); flex: none; text-align: center; }
+.panel-foot .btns { margin-top: 6px; }
+.panel-foot .hint { margin: 6px 0 0 !important; }
+.btn.big { width: 100%; font-size: 21px; padding: 12px 18px 9px; }
+.wallet-pill.tp { background: rgba(76, 201, 240, 0.14); border-color: #4cc9f0; color: #bdeeff; }
+.wallet-pill.rank { background: rgba(247, 37, 133, 0.14); border-color: #f72585; color: #ffc2de; }
+
+/* book: today */
+.item.hero { border: 1px solid var(--accent); background: rgba(255, 209, 102, 0.1); }
+.item.hero .kicker { font-size: 12px; letter-spacing: 1.5px; color: var(--accent); font-weight: 800; }
+.item.hero b { font-size: 19px; }
+.item.quest { flex-direction: row; align-items: center; gap: 12px; }
+.item.quest .check { width: 32px; height: 32px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: rgba(255, 255, 255, 0.1); }
+.item.quest.done .check { background: var(--good); color: #0b1230; }
+.item.quest .qtext { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+/* book: badges */
+.badge-summary { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; }
+.badge-summary .bar, .bdg-prog .bar { display: block; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; flex: 1; }
+.badge-summary .bar i, .bdg-prog .bar i { display: block; height: 100%; background: linear-gradient(90deg, #9d4edd, var(--accent)); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip { border: 1px solid rgba(255, 255, 255, 0.2); background: transparent; color: var(--ink); border-radius: 999px; padding: 5px 12px 3px; font-family: var(--font); font-weight: 800; font-size: 14px; cursor: pointer; }
+.chip.on { background: var(--accent); color: #1a1230; border-color: var(--accent); }
+.book .bdg { opacity: 1; }
+.book .bdg:not(.got) b { color: var(--muted); }
+.bdg-top { display: flex; align-items: center; gap: 8px; }
+.bdg .medal { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 13px; background: rgba(255, 255, 255, 0.08); }
+.bdg.got .medal { background: linear-gradient(135deg, #ffd166, #f72585); color: #fff; font-size: 15px; }
+.bdg-prog { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.bdg-prog em { font-style: normal; font-size: 12px; font-weight: 800; color: var(--muted); }
+/* settings */
+.set-group { margin: 4px 0 14px; padding: 4px 12px 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.04); }
+.set-group h3 { margin: 8px 0 2px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); }
+.panel.settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; font-weight: 700; }
+.panel.settings input[type='range'] { width: 52%; accent-color: var(--accent); touch-action: pan-x; }
+/* end card */
+.panel.end .panel-body { text-align: center; }
+.panel.end .game-name { margin: 2px 0 0; }
+.panel.end .score { margin-top: 2px; }
+.panel.end .score-label { margin: 0 0 4px; }
+.earned { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 8px 0; }
+.panel.end .lines { color: var(--muted); font-size: 15px; }
+.btns.main .btn { flex: 1; }
+.btns.share { margin-top: 8px !important; }
+/* game menu */
+.panel.game .blurb { margin: 4px 0 0 !important; }
+.panel.game .howto { margin-top: 0; }
+.profile summary { color: var(--muted) !important; font-size: 15px; }

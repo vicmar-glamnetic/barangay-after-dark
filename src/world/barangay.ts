@@ -8,6 +8,7 @@ import {
   pottedPlant, sampayan, sariSari, shade, tree, tricycle, waitingShed,
   bangaJars, bush, crateStack, drums, hollowBlocks, kariton,
 } from './props';
+import { banderitas, canPlant, chickenCoop, chismisTable, monobloc, palanggana, tanodBooth, tirePlanter, videokeSpeaker } from './details';
 import { GlowField } from './glows';
 import { capizTexture, courtTexture, radialTexture, signTexture, storeWindowTexture } from './textures';
 
@@ -86,6 +87,10 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
     jeepA: signTexture([{ text: 'BAYAN - PALENGKE', size: 54, color: '#ffef9f' }], '#7b1e3a', 512, 128),
     jeepB: signTexture([{ text: 'CUBAO - QUIAPO', size: 54, color: '#e0fbfc' }], '#0b3d91', 512, 128),
     court: courtTexture(),
+    signTanod: signTexture([{ text: 'TANOD', size: 58, color: '#ffffff' }, { text: 'Brgy. Tibay Outpost', size: 26, color: '#ffe066' }], '#1d4e89', 512, 140, { border: '#ffffff' }),
+    signUmihi: signTexture([{ text: 'BAWAL UMIHI DITO!', size: 56, color: '#c1121f' }, { text: '- Brgy. Tibay', size: 26, color: '#333333' }], '#f4f1e6', 512, 128),
+    signUtang: signTexture([{ text: 'BAWAL ANG UTANG', size: 50, color: '#ffffff' }, { text: 'BUKAS PWEDE :)', size: 40, color: '#ffe066' }], '#2b2d42', 512, 150, { border: '#ffe066' }),
+    tarpPista: signTexture([{ text: 'MALIGAYANG PISTA!', size: 78, color: '#ffe066' }, { text: 'BRGY. TIBAY  ·  LIGA NG KABATAAN 2026', size: 34, color: '#ffffff' }], '#a4161a', 1024, 160, { border: '#ffd166' }),
   };
   const b: B = { kit, tex, T };
 
@@ -149,6 +154,38 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   bush(b, 4, -27.2, 1.1);
   bush(b, 27.8, -17.2, 1);
 
+  // ---------------------------------------------------------------- typical barangay details
+  // chismisan: a plastic table with monoblocs in front of the teal house (the titas are NPCs, see world/life.ts)
+  chismisTable(b, { x: -15.5, z: -6.35, rot: 0 });
+  monobloc(b, { x: -16.45, z: -6.0, rot: 1.3 }, 0xf2f2f2);
+  monobloc(b, { x: -14.55, z: -6.1, rot: -1.4 }, 0x2a9d8f);
+  monobloc(b, { x: -15.3, z: -5.45, rot: 2.9 }, 0xe63946);
+  // painted tire planters and paint-can plants along the house fronts
+  tirePlanter(b, -23.4, -6.5, 0xf2c230);
+  tirePlanter(b, -22.5, -6.45, 0xe63946);
+  tirePlanter(b, -21.6, -6.5, 0x2a9d8f);
+  canPlant(b, -10.4, -7.95);
+  canPlant(b, -10.0, -7.95, 0.85);
+  canPlant(b, -9.6, -7.95, 1.1);
+  canPlant(b, 12.0, -7.65);
+  canPlant(b, 12.4, -7.65, 0.8);
+  // tanod outpost by the east arch
+  tanodBooth(b, { x: 27.4, z: -6.5, rot: 0 });
+  // videoke night: speaker box and chairs outside the videoke house
+  videokeSpeaker(b, { x: 21.0, z: -6.9, rot: 0 });
+  monobloc(b, { x: 21.9, z: -6.45, rot: 0.3 }, 0xf2f2f2);
+  monobloc(b, { x: 22.7, z: -6.4, rot: -0.2 }, 0xf2c230);
+  // laundry day by the sampayan
+  palanggana(b, { x: -12.3, z: -17.6, rot: 0.3 });
+  // chicken coop by the south houses (the chickens are NPCs)
+  chickenCoop(b, { x: -10.2, z: 24.7, rot: Math.PI });
+  // signs every barangay has
+  tex.quad(T.signUmihi, STORE, 2.53, 1.45, 0, 1.4, 0.35, { ry: Math.PI / 2, lit: true, bright: 1.1 });
+  tex.quad(T.signUtang, STORE, 1.95, 1.55, 2.08, 0.72, 0.21, { lit: false, bright: 0.95 }); // on the store's door
+  // fiesta tarp tied between the covered court's road-side posts
+  tex.quad(T.tarpPista, COURT, -4, 4.7, -5.62, 7.4, 1.16, { ry: Math.PI, lit: true, bright: 1.15 });
+  tex.quad(T.tarpPista, COURT, -4, 4.7, -5.58, 7.4, 1.16, { lit: true, bright: 0.6 });
+
   // ---------------------------------------------------------------- road vehicles + landmarks
   jeepney(b, { x: -5.5, z: 1.9, rot: Math.PI / 2 }, 0xd2364a, 0xf2c230, 0x2f6fd6, T.jeepA);
   jeepney(b, { x: 18.5, z: -1.9, rot: -Math.PI / 2 }, 0x2f6fd6, 0xf2c230, 0xffffff, T.jeepB);
@@ -197,6 +234,19 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   phys.addBox(HALF + 0.3, 1, 0, 0.3, 2, 31);
 
   // ---------------------------------------------------------------- build the merged static meshes
+  // banderitas zig-zag across the road between the street lamp posts (fiesta!)
+  const flagStrings: THREE.Vector3[][] = [];
+  {
+    const north = LAMPS.filter((l) => l.z < 0 && Math.abs(l.z) < 6).map((l) => l.x).sort((a, c) => a - c);
+    const south = LAMPS.filter((l) => l.z > 0 && Math.abs(l.z) < 6).map((l) => l.x).sort((a, c) => a - c);
+    const posts = [...north.map((x) => ({ x, z: -4.85 })), ...south.map((x) => ({ x, z: 4.85 }))].sort((a, c) => a.x - c.x);
+    for (let i = 0; i < posts.length - 1; i++) {
+      const a = posts[i], c = posts[i + 1];
+      if (Math.sign(a.z) === Math.sign(c.z)) continue; // only strings that cross the road
+      flagStrings.push(banderitas(b, new THREE.Vector3(a.x, 6.6, a.z), new THREE.Vector3(c.x, 6.6, c.z), 0.9));
+    }
+  }
+
   const staticMesh = sb.build(new THREE.MeshBasicMaterial({ vertexColors: true }));
   if (staticMesh) scene.add(staticMesh);
   tex.build(scene);
@@ -215,7 +265,8 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   // one old lamp near the plaza flickers now and then
   const flicker = lampGlows[4];
   let flickT = 6;
-  glow(storeBulb, 0xffe0a8, 2.0);
+  // the bulb hangs under the awning: a smaller halo, kept below the store sign so it doesn't wash it out
+  glow(storeBulb.clone().setY(2.2), 0xffe0a8, 1.25);
   glow(floodA, 0xfff0d0, 3.0);
   glow(floodB, 0xfff0d0, 3.0);
 
@@ -252,6 +303,7 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
     }
   };
   for (const [p, q] of courtInfo.strings) addString(p, q, 0.7, 16);
+  for (const pts of flagStrings) for (let i = 0; i < pts.length - 1; i++) wirePts.push(pts[i].x, pts[i].y, pts[i].z, pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
   addString(local(STORE, -2.75, 2.45, 3.97), local(STORE, 2.75, 2.45, 3.97), 0.25, 10);
   const wireGeo = new THREE.BufferGeometry();
   wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(wirePts, 3));
@@ -279,9 +331,15 @@ export function buildBarangay(scene: THREE.Scene, phys: Physics, lighting: Light
   glows.build();
 
   // videoke window: cycling party colors (its own tiny material)
-  const vkMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
-  const vk = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.0), vkMat);
-  vk.position.set(23.5 + 1.2, 1.5, -10.5 + 3.02);
+  // A colored glow laid OVER the house's front capiz window (house at x 23.5, w 7, d 6: window at
+  // x + w*0.22, z + d/2). It used to sit on the wall's own plane, off-center, and z-fought with it.
+  const vkMat = new THREE.MeshBasicMaterial({
+    color: 0xff00ff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+  });
+  const vk = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.9), vkMat);
+  vk.position.set(23.5 + 7 * 0.22, 1.5, -10.5 + 3 + 0.08);
+  vk.renderOrder = 2;
   scene.add(vk);
   const vkColors = [0xff3df5, 0x3dd9ff, 0xffe53d, 0x5dff7a].map((h) => new THREE.Color(h));
 

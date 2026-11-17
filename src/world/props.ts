@@ -69,6 +69,10 @@ export interface Textures {
   jeepA: THREE.Texture;
   jeepB: THREE.Texture;
   court: THREE.Texture;
+  signTanod: THREE.Texture;
+  signUmihi: THREE.Texture;
+  signUtang: THREE.Texture;
+  tarpPista: THREE.Texture;
 }
 
 export interface B {
@@ -171,8 +175,9 @@ export function sariSari(b: B, f: Frame): void {
   tex.quad(T.store, f, -0.3, 1.55, 2.03, 3.2, 1.6, { lit: false, bright: 1.15 });
   kit.box(f, -0.3, 0.7, 2.12, 3.4, 0.08, 0.3, C.wood);
   kit.box(f, 1.95, 0, 2.03, 0.8, 2.0, 0.06, C.door);
-  // sign
-  tex.quad(T.signStore, f, -0.1, 2.7, 2.06, 4.4, 1.1 * 0.62, { lit: false, bright: 0.9 });
+  // sign: stands on the front edge of the awning (behind it, the awning hid the top half)
+  kit.box(f, -0.1, 2.46, 4.02, 4.5, 0.74, 0.05, C.darkWood);
+  tex.quad(T.signStore, f, -0.1, 2.83, 4.06, 4.4, 1.1 * 0.62, { lit: false, bright: 0.9 });
   // awning: single slope
   const pitch = 0.24;
   kit.geo(f, corrugated(5.8, 2.1, 0.025, 0.22), C.roofRed, 0, 2.98, 2.0, { rx: pitch, noise: 0.25 });
@@ -374,7 +379,8 @@ export function arch(b: B, f: Frame): void {
     kit.box(f, sx * 4.7, 5.6, 0, 1.0, 0.3, 1.0, 0xe9c46a);
   }
   kit.box(f, 0, 4.5, 0, 10.2, 1.1, 0.5, col);
-  tex.quad(T.signArch, f, 0, 5.05, 0.27, 9.2, 0.92, { lit: false, bright: 0.85 });
+  // the pillars' inner faces are 8.6 m apart: keep the sign (and its text) clear of them
+  tex.quad(T.signArch, f, 0, 5.05, 0.27, 8.3, 0.83, { lit: false, bright: 0.85 });
   kit.box(f, 0, 5.6, 0, 3, 0.5, 0.4, 0xe9c46a);
 }
 

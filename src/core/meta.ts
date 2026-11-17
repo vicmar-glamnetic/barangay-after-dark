@@ -37,6 +37,8 @@ export interface Badge {
   barya: number;
   /** Checked after every game (and after sorbetes / shop / streak changes). */
   test: (d: SaveData, f: Finish | null) => boolean;
+  /** For count-based badges: [current, goal] so the Libro can show a progress bar. */
+  progress?: (d: SaveData) => [number, number];
 }
 
 const t3 = (id: string) => STAR_THRESHOLDS[id]?.[2] ?? Infinity;
@@ -44,17 +46,17 @@ const playedAll = (d: SaveData) => Object.keys(STAR_THRESHOLDS).every((id) => (d
 const totalPlays = (d: SaveData) => Object.values(d.plays).reduce((a, b) => a + b, 0);
 const is = (f: Finish | null, id: string) => !!f && f.gameId === id;
 
-const badge = (id: string, name: [string, string], desc: [string, string], barya: number, test: Badge['test']): Badge => ({
-  id, barya, test,
+const badge = (id: string, name: [string, string], desc: [string, string], barya: number, test: Badge['test'], progress?: Badge['progress']): Badge => ({
+  id, barya, test, progress,
   get name() { return L(name[0], name[1]); },
   get desc() { return L(desc[0], desc[1]); },
 });
 
 export const BADGES: Badge[] = [
-  badge('first', ['Unang Laro', 'First Game'], ['Tapusin ang unang laro mo.', 'Finish your very first game.'], 20, (d) => totalPlays(d) >= 1),
-  badge('allGames', ['Laro ng Lahi', 'Heritage Player'], ['Laruin lahat ng laro sa barangay.', 'Play every game in the barangay.'], 80, playedAll),
-  badge('star3', ['Tatlong Bituin', 'Three Stars'], ['Makakuha ng ★★★ sa kahit anong laro.', 'Get ★★★ in any game.'], 40, (d) => Object.values(d.stars).some((s) => s >= 3)),
-  badge('star3All', ['Bituin ng Barangay', 'Star of the Barangay'], ['Makakuha ng ★★★ sa lahat ng laro.', 'Get ★★★ in every game.'], 300, (d) => Object.keys(STAR_THRESHOLDS).every((id) => (d.stars[id] ?? 0) >= 3)),
+  badge('first', ['Unang Laro', 'First Game'], ['Tapusin ang unang laro mo.', 'Finish your very first game.'], 20, (d) => totalPlays(d) >= 1, (d) => [Math.min(1, totalPlays(d)), 1]),
+  badge('allGames', ['Laro ng Lahi', 'Heritage Player'], ['Laruin lahat ng laro sa barangay.', 'Play every game in the barangay.'], 80, playedAll, (d) => [Object.keys(STAR_THRESHOLDS).filter((id) => (d.plays[id] ?? 0) > 0).length, Object.keys(STAR_THRESHOLDS).length]),
+  badge('star3', ['Tatlong Bituin', 'Three Stars'], ['Makakuha ng ★★★ sa kahit anong laro.', 'Get ★★★ in any game.'], 40, (d) => Object.values(d.stars).some((s) => s >= 3), (d) => [Math.max(0, ...Object.values(d.stars)), 3]),
+  badge('star3All', ['Bituin ng Barangay', 'Star of the Barangay'], ['Makakuha ng ★★★ sa lahat ng laro.', 'Get ★★★ in every game.'], 300, (d) => Object.keys(STAR_THRESHOLDS).every((id) => (d.stars[id] ?? 0) >= 3), (d) => [Object.keys(STAR_THRESHOLDS).filter((id) => (d.stars[id] ?? 0) >= 3).length, Object.keys(STAR_THRESHOLDS).length]),
   badge('untouched', ['Di Mahuli', 'Untouchable'], ['Tumbang Preso: tapusin nang hindi na-taya.', 'Tumbang Preso: finish without ever getting tagged.'], 40, (_d, f) => is(f, 'tumbangPreso') && f!.feats.includes('untouched') && f!.score >= 20),
   badge('sipa20', ['Paang Bakal', 'Iron Foot'], ['Sipa: 20 sunod-sunod na sipa.', 'Sipa: 20 kicks in a row.'], 50, (_d, f) => is(f, 'sipa') && f!.score >= 20),
   badge('lusot', ['Lusot!', 'Slipped Through!'], ['Patintero: makabalik nang walang nawalang buhay.', 'Patintero: make it there and back without losing a life.'], 50, (_d, f) => is(f, 'patintero') && f!.feats.includes('flawless')),
@@ -67,21 +69,21 @@ export const BADGES: Badge[] = [
   badge('palayok3', ['Bulag pero Bihasa', 'Blind but Brilliant'], ['Pukpok Palayok: ★★★', 'Pukpok Palayok (pot breaking): ★★★'], 50, (_d, f) => is(f, 'pukpokPalayok') && f!.score >= t3('pukpokPalayok')),
   badge('sungka3', ['Hari ng Sungka', 'Sungka Master'], ['Sungka: ★★★', 'Sungka (shell board game): ★★★'], 50, (_d, f) => is(f, 'sungka') && f!.score >= t3('sungka')),
   badge('trumpo3', ['Ikot Pa More', 'Spin Doctor'], ['Trumpo: ★★★', 'Trumpo (spinning top): ★★★'], 50, (_d, f) => is(f, 'trumpo') && f!.score >= t3('trumpo')),
-  badge('streak3', ['Tatlong Araw', 'Three-Day Streak'], ['3 araw sunod-sunod na Hamon.', 'Finish the daily challenge 3 days in a row.'], 40, (d) => d.streak >= 3),
-  badge('streak7', ['Isang Linggo', 'One-Week Streak'], ['7 araw sunod-sunod na Hamon.', 'Finish the daily challenge 7 days in a row.'], 120, (d) => d.streak >= 7),
-  badge('streak30', ['Isang Buwan', 'One-Month Streak'], ['30 araw sunod-sunod na Hamon.', 'Finish the daily challenge 30 days in a row.'], 500, (d) => d.streak >= 30),
-  badge('plays50', ['Laging Nasa Kanto', 'Always Outside'], ['Maglaro nang 50 beses.', 'Play 50 games.'], 80, (d) => totalPlays(d) >= 50),
-  badge('plays200', ['Tambay ng Taon', 'Regular of the Year'], ['Maglaro nang 200 beses.', 'Play 200 games.'], 250, (d) => totalPlays(d) >= 200),
+  badge('streak3', ['Tatlong Araw', 'Three-Day Streak'], ['3 araw sunod-sunod na Hamon.', 'Finish the daily challenge 3 days in a row.'], 40, (d) => d.streak >= 3, (d) => [d.streak, 3]),
+  badge('streak7', ['Isang Linggo', 'One-Week Streak'], ['7 araw sunod-sunod na Hamon.', 'Finish the daily challenge 7 days in a row.'], 120, (d) => d.streak >= 7, (d) => [d.streak, 7]),
+  badge('streak30', ['Isang Buwan', 'One-Month Streak'], ['30 araw sunod-sunod na Hamon.', 'Finish the daily challenge 30 days in a row.'], 500, (d) => d.streak >= 30, (d) => [d.streak, 30]),
+  badge('plays50', ['Laging Nasa Kanto', 'Always Outside'], ['Maglaro nang 50 beses.', 'Play 50 games.'], 80, (d) => totalPlays(d) >= 50, (d) => [totalPlays(d), 50]),
+  badge('plays200', ['Tambay ng Taon', 'Regular of the Year'], ['Maglaro nang 200 beses.', 'Play 200 games.'], 250, (d) => totalPlays(d) >= 200, (d) => [totalPlays(d), 200]),
   badge('mpWin', ['Hari ng Tropa', 'King of the Crew'], ['Manalo sa laro kasama ang tropa.', 'Win a game against your friends.'], 50, (_d, f) => !!f && f.multiplayer && f.won),
   badge('tourWin', ['Kampeon ng Torneo', 'Tournament Champion'], ['Manalo sa Torneo (3 laro).', 'Win a 3-game Tournament.'], 120, (_d, f) => !!f && f.tourWon),
   badge('rival', ['Talo si Karibal', 'Rival Beaten'], ['Talunin ang isang karibal.', 'Beat one of the neighborhood rivals.'], 30, (_d, f) => !!f && f.rivalBeaten),
-  badge('rivalMax', ['Wala nang Karibal', 'No Rivals Left'], ['Talunin ang isang karibal sa level 5.', 'Beat a rival at level 5.'], 200, (d) => Object.values(d.rivals).some((l) => l >= RIVAL_MAX)),
+  badge('rivalMax', ['Wala nang Karibal', 'No Rivals Left'], ['Talunin ang isang karibal sa level 5.', 'Beat a rival at level 5.'], 200, (d) => Object.values(d.rivals).some((l) => l >= RIVAL_MAX), (d) => [Math.max(0, ...Object.values(d.rivals)), RIVAL_MAX]),
   badge('fiesta', ['Fiesta!', 'Fiesta!'], ['Maglaro habang may Fiesta.', 'Play a game during a Fiesta night.'], 30, (_d, f) => !!f && f.event === 'fiesta'),
   badge('dilim', ['Sa Dilim', 'In the Dark'], ['Maglaro ng Taguan habang brownout.', 'Play Taguan (hide and seek) during a brownout.'], 50, (_d, f) => is(f, 'taguan') && f!.event === 'brownout'),
   badge('ulan', ['Basang Sisiw', 'Soaked'], ['Maglaro habang umuulan.', 'Play a game in the rain.'], 30, (_d, f) => !!f && f.event === 'ulan'),
-  badge('sorbetes', ['Sorbetero!', 'Ice Cream Run'], ['Abutan ang sorbetero.', 'Catch the sorbetero (ice cream cart).'], 30, (d) => d.sorbetes >= 1),
-  badge('shop5', ['Mayaman', 'Big Spender'], ['Bumili ng 5 bagay sa Tindahan.', "Buy 5 things at Aling Nena's store."], 100, (d) => d.owned.length >= 5),
-  badge('hari', ['Hari ng Kanto', 'Hari ng Kanto'], ['Abutin ang pinakamataas na ranggo.', 'Reach the highest rank.'], 1000, (d) => rankIndex(d.tropaPoints) >= RANKS.length - 1),
+  badge('sorbetes', ['Sorbetero!', 'Ice Cream Run'], ['Abutan ang sorbetero.', 'Catch the sorbetero (ice cream cart).'], 30, (d) => d.sorbetes >= 1, (d) => [Math.min(1, d.sorbetes), 1]),
+  badge('shop5', ['Mayaman', 'Big Spender'], ['Bumili ng 5 bagay sa Tindahan.', "Buy 5 things at Aling Nena's store."], 100, (d) => d.owned.length >= 5, (d) => [d.owned.length, 5]),
+  badge('hari', ['Hari ng Kanto', 'Hari ng Kanto'], ['Abutin ang pinakamataas na ranggo.', 'Reach the highest rank.'], 1000, (d) => rankIndex(d.tropaPoints) >= RANKS.length - 1, (d) => [d.tropaPoints, RANKS[RANKS.length - 1].at]),
 ];
 
 /** Award every newly earned badge. Returns the new ones (Barya already added). */

@@ -10,6 +10,7 @@ import {
 import { Session } from '../net/session';
 import { fetchTop, submitScore, type BoardRow } from '../net/leaderboard';
 import { Blackboard } from '../world/blackboard';
+import { BarangayLife } from '../world/life';
 import { L } from '../core/i18n';
 import { BADGES } from '../core/meta';
 import type { Menus } from '../ui/menus';
@@ -78,6 +79,7 @@ export class GameManager {
   private tauntAt = new Map<string, number>();
   private board: Blackboard;
   private store: NpcGroup;
+  private life: BarangayLife;
   private boardT = 0;
   private topT = 0;
   private top: { game: string; rows: BoardRow[] | null } = { game: '', rows: null };
@@ -88,6 +90,7 @@ export class GameManager {
     this.store = new NpcGroup(base.scene, STORE_SPOT, [{ x: 7.05, z: -7.85, faceX: 6.6, faceZ: -5, mode: 'wave' }], new THREE.Vector3(6.6, 3.55, -7.6), base.blobs, base.groundAt);
     this.store.kids[0].root.scale.setScalar(1.3); // Aling Nena is a grown-up
     this.labelStore();
+    this.life = new BarangayLife(base.scene, base.blobs);
     for (const g of this.games) {
       const L = g.layout;
       const group = new NpcGroup(base.scene, L.spot, L.kids, L.labelPos, base.blobs, base.groundAt);
@@ -234,6 +237,7 @@ export class GameManager {
   update(dt: number, t: number, camPos: THREE.Vector3, controlsActive: boolean, simulate: boolean): void {
     for (const g of this.games) g.group.update(dt, t, camPos, g === this.active);
     this.store.update(dt, t, camPos, false);
+    this.life.update(dt, t, camPos);
     const { hud, touch, input, player, isTouch } = this.ctx;
     this.updateBoard(dt);
 

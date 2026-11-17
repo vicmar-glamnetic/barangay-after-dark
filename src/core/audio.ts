@@ -394,6 +394,10 @@ export class AudioSys {
     this.startCrickets();
     this.later(6000 + Math.random() * 8000, () => this.dogLoop());
     this.later(2500, () => this.startVideoke());
+    this.later(25000 + Math.random() * 20000, () => this.roosterLoop());
+    this.later(18000 + Math.random() * 20000, () => this.vendorLoop());
+    this.later(12000 + Math.random() * 15000, () => this.kidsLoop());
+    this.later(3000, () => this.murmurLoop());
   }
 
   /** Synthesize a few seconds of chirping and loop it. Two layers for depth. */
@@ -426,6 +430,11 @@ export class AudioSys {
       }
       return buf;
     };
+    // all cricket layers share one bus that swells in and out (not a constant wall of chirps)
+    const bus = ctx.createGain();
+    bus.gain.value = 0;
+    bus.connect(this.amb);
+    this.crickets = bus;
     const layer = (buf: AudioBuffer, gain: number, cutoff: number) => {
       const s = ctx.createBufferSource();
       s.buffer = buf;
@@ -435,11 +444,106 @@ export class AudioSys {
       f.frequency.value = cutoff;
       const g = ctx.createGain();
       g.gain.value = gain;
-      s.connect(f).connect(g).connect(this.amb);
+      s.connect(f).connect(g).connect(bus);
       s.start();
     };
-    layer(make(5.3, 4400, 0.42, 3), 0.55, 9000);
-    layer(make(7.1, 3600, 0.7, 4), 0.32, 5000);
+    layer(make(5.3, 4400, 0.42, 3), 0.28, 9000);
+    layer(make(7.1, 3600, 0.7, 4), 0.15, 5000);
+    this.cricketSwell(true);
+  }
+
+  private crickets: GainNode | null = null;
+
+  /** Crickets come and go: a chorus for 8-15 s, then near silence for 20-45 s. */
+  private cricketSwell(on: boolean): void {
+    if (this.ctx && this.crickets) this.crickets.gain.setTargetAtTime(on ? 1 : 0.06, this.ctx.currentTime, on ? 2.5 : 3.5);
+    this.later(on ? 8000 + Math.random() * 7000 : 20000 + Math.random() * 25000, () => this.cricketSwell(!on));
+  }
+
+  // ---------------------------------------------------------------- Filipino night sounds
+
+  /** A rooster crowing from the coop now and then (yes, they crow at night too). */
+  private roosterLoop(): void {
+    if (this.live) {
+      const ctx = this.ctx!;
+      const out = ctx.createGain();
+      out.gain.value = 1.4;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1300;
+      bp.Q.value = 0.9;
+      bp.connect(out).connect(this.panner(new THREE.Vector3(-10.2, 1, 24.7), 5, 0.7)).connect(this.amb);
+      // "tik-ti-la-OOOK": three short rising notes and a long falling one
+      let t = ctx.currentTime + 0.05;
+      const notes: [number, number, number][] = [[520, 640, 0.12], [600, 720, 0.12], [680, 820, 0.14], [900, 560, 0.75]];
+      for (const [f0, f1, d] of notes) {
+        this.tone('sawtooth', f0, f1, t, d, 0.35, bp, 0.02);
+        this.tone('square', f0 * 2, f1 * 2, t, d, 0.06, bp, 0.02);
+        t += d + 0.04;
+      }
+    }
+    this.later(70000 + Math.random() * 70000, () => this.roosterLoop());
+  }
+
+  /** Street vendors calling out somewhere in the barangay (spoken, low and far). */
+  private vendorLoop(): void {
+    const calls = ['Baluuut! Penoy! Baluuut!', 'Tahooo! Tahooo!', 'Puto! Kutsinta!', 'Pandesaaal! Mainit pa!', 'Binatog! Mais!'];
+    if (this.live) this.callOut(calls[Math.floor(Math.random() * calls.length)]);
+    this.later(55000 + Math.random() * 50000, () => this.vendorLoop());
+  }
+
+  /** Kids laughing far away. */
+  private kidsLoop(): void {
+    if (this.live) {
+      const a = Math.random() * Math.PI * 2;
+      const pos = new THREE.Vector3(Math.cos(a) * 30, 1, Math.sin(a) * 30);
+      for (let i = 0; i < 3; i++) window.setTimeout(() => this.play('giggle', { pos, vol: 0.9 }), i * 350);
+    }
+    this.later(35000 + Math.random() * 40000, () => this.kidsLoop());
+  }
+
+  /** The titas' chismis murmur at their table (only heard up close). */
+  private murmurLoop(): void {
+    if (this.live) {
+      const ctx = this.ctx!;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 900;
+      bp.Q.value = 1.2;
+      const p = this.panner(new THREE.Vector3(-15.5, 1.5, -6.35), 1.5, 2.2);
+      bp.connect(p).connect(this.amb);
+      let t = ctx.currentTime + 0.02;
+      const syll = 5 + Math.floor(Math.random() * 7);
+      const base = 190 + Math.random() * 90;
+      for (let i = 0; i < syll; i++) {
+        const f = base * (0.9 + Math.random() * 0.3);
+        const d = 0.07 + Math.random() * 0.1;
+        this.tone('triangle', f, f * (0.9 + Math.random() * 0.2), t, d, 0.22, bp, 0.01);
+        t += d + 0.02 + Math.random() * 0.06;
+      }
+    }
+    this.later(1600 + Math.random() * 2200, () => this.murmurLoop());
+  }
+
+  /** A low, unhurried adult voice from afar. Never interrupts game hints. */
+  private callOut(text: string): void {
+    const ss = window.speechSynthesis;
+    if (!ss || this.volume <= 0 || ss.speaking || ss.pending) return;
+    try {
+      const all = ss.getVoices();
+      const v = all.find((x) => /^(fil|tl)/i.test(x.lang)) ?? all.find((x) => /^es/i.test(x.lang)) ?? all.find((x) => /^id/i.test(x.lang));
+      const u = new SpeechSynthesisUtterance(text);
+      if (v) {
+        u.voice = v;
+        u.lang = v.lang;
+      }
+      u.pitch = 0.75;
+      u.rate = 0.8;
+      u.volume = Math.min(1, this.volume * 0.35);
+      ss.speak(u);
+    } catch {
+      /* ignore */
+    }
   }
 
   private dogLoop(): void {

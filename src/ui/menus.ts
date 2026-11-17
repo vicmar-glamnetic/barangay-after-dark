@@ -178,6 +178,43 @@ export class Menus {
     return b;
   }
 
+  /**
+   * Shared card layout: a header that stays put (title + ✕), a scrolling
+   * middle, and a footer that stays put (the main buttons). Esc closes.
+   */
+  private panel(cls: string, o: {
+    title: string;
+    titleCls?: string;
+    head?: (Node | null | false)[];
+    body: (Node | null | false)[];
+    foot?: (Node | null | false)[];
+    onClose?: () => void;
+  }): HTMLElement {
+    const top = el('div.panel-top', {}, el(`h2${o.titleCls ?? ''}` as 'h2', { text: o.title }));
+    if (o.onClose) {
+      const close = el('button.icon-btn.close', { text: '✕', attrs: { 'aria-label': L('Isara', 'Close') } });
+      const fn = o.onClose;
+      onTap(close, () => {
+        this.cb.onUiSound();
+        fn();
+      });
+      top.append(close);
+    }
+    const head = el('div.panel-head', {}, top, ...(o.head ?? []).filter(Boolean) as Node[]);
+    const body = el('div.panel-body', {}, ...o.body.filter(Boolean) as Node[]);
+    const foot = o.foot?.some(Boolean) ? el('div.panel-foot', {}, ...o.foot.filter(Boolean) as Node[]) : null;
+    return el(`div.card.panel${cls}` as 'div', {}, head, body, foot);
+  }
+
+  /** Round wallet pills: Barya, Tropa Points, rank. */
+  private walletPills(): HTMLElement {
+    const d = this.save.data;
+    return el('div.wallet-row', {},
+      el('span.wallet-pill', {}, el('i.coin'), document.createTextNode(`${d.barya} Barya`)),
+      el('span.wallet-pill.tp', { text: `★ ${d.tropaPoints} Tropa Points` }),
+      el('span.wallet-pill.rank', { text: RANKS[rankIndex(d.tropaPoints)].name }));
+  }
+
   // --------------------------------------------------------------- pause
 
   showPause(inGame: boolean, net: { inLobby: boolean; inNetGame: boolean; onJoin: () => void; onLobby: () => void } | null = null): void {
@@ -264,42 +301,40 @@ export class Menus {
       reset.disabled = true;
     });
 
-    const card = el(
-      'div.card.settings',
-      {},
-      el('h2', { text: 'Settings' }),
-      el('label', {}, el('span', { text: L('Wika', 'Language') }), this.langSwitch(() => this.showSettings(back))),
-      el('label', {}, el('span', {}, document.createTextNode('Sensitivity '), sensVal), sens),
-      el('label', {}, el('span', { text: 'Invert Y' }), seg([
-        ['Off', () => !s.invertY, () => (s.invertY = false)],
-        ['On', () => s.invertY, () => (s.invertY = true)],
-      ])),
-      el('label', {}, el('span', { text: 'Quality' }), seg([
-        ['Low', () => s.quality === 'low', () => (s.quality = 'low')],
-        ['High', () => s.quality === 'high', () => (s.quality = 'high')],
-      ])),
-      device.isMobile ? null : el('label', {}, el('span', { text: L('Glow (mabigat sa GPU)', 'Glow (heavy on the GPU)') }), seg([
-        ['Off', () => !s.glow, () => (s.glow = false)],
-        ['On', () => s.glow, () => (s.glow = true)],
-      ])),
-      el('label', {}, el('span', { text: 'Auto FPS' }), seg([
-        ['Off', () => !s.autoFps, () => (s.autoFps = false)],
-        ['On', () => s.autoFps, () => (s.autoFps = true)],
-      ])),
-      el('label', {}, el('span', { text: L('Ipakita ang FPS', 'Show FPS') }), seg([
-        ['Off', () => !s.showFps, () => (s.showFps = false)],
-        ['On', () => s.showFps, () => (s.showFps = true)],
-      ])),
-      el('label', {}, el('span', { text: 'Volume' }), vol),
-      el('label', {}, el('span', { text: 'Online ranking' }), seg([
-        ['Off', () => !s.onlineScores, () => (s.onlineScores = false)],
-        ['On', () => s.onlineScores, () => (s.onlineScores = true)],
-      ])),
-      this.slipperField(),
-      this.faceField(),
-      el('div.btns', {}, this.button(L('Balik', 'Back'), '', back), reset),
-    );
+    const row = (label: string | Node, ctl: Node) => el('label', {}, typeof label === 'string' ? el('span', { text: label }) : label, ctl);
+    const onOff = (get: () => boolean, set: (v: boolean) => void) => seg([['Off', () => !get(), () => set(false)], ['On', get, () => set(true)]]);
+    const section = (title: string, ...items: (Node | null)[]) => el('div.set-group', {}, el('h3', { text: title }), ...items.filter(Boolean) as Node[]);
+    const card = this.panel('.settings', {
+      title: 'Settings',
+      onClose: back,
+      body: [
+        section(L('Wika at tunog', 'Language & sound'),
+          row(L('Wika', 'Language'), this.langSwitch(() => this.showSettings(back))),
+          row('Volume', vol)),
+        section(L('Kontrol', 'Controls'),
+          row(el('span', {}, document.createTextNode(L('Bilis ng tingin ', 'Look speed ')), sensVal), sens),
+          row(L('Baligtad na Y', 'Invert Y'), onOff(() => s.invertY, (v) => (s.invertY = v)))),
+        section(L('Itsura', 'Graphics'),
+          row(L('Kalidad', 'Quality'), seg([
+            ['Low', () => s.quality === 'low', () => (s.quality = 'low')],
+            ['High', () => s.quality === 'high', () => (s.quality = 'high')],
+          ])),
+          device.isMobile ? null : row(L('Glow (mabigat sa GPU)', 'Glow (heavy on the GPU)'), onOff(() => s.glow, (v) => (s.glow = v))),
+          row(L('Auto FPS (iwas lag)', 'Auto FPS (avoids lag)'), onOff(() => s.autoFps, (v) => (s.autoFps = v))),
+          row(L('Ipakita ang FPS', 'Show FPS'), onOff(() => s.showFps, (v) => (s.showFps = v)))),
+        section(L('Ikaw', 'You'),
+          this.nameField(),
+          this.slipperField(),
+          this.faceField(),
+          row(L('Online ranking', 'Online ranking'), onOff(() => s.onlineScores, (v) => (s.onlineScores = v)))),
+        section(L('Delikado', 'Danger zone'), el('div.btns', {}, reset)),
+      ],
+      foot: [this.button(L('Tapos na', 'Done'), '', back)],
+    });
     this.open('settings', card);
+    this.setKeys((e) => {
+      if (e.key === 'Escape') back();
+    });
   }
 
   // --------------------------------------------------------------- end card
@@ -309,12 +344,12 @@ export class Menus {
     extra: EndExtra,
     o: { onRetry: (() => void) | null; retryLabel?: string; retryNote?: string; onBack: () => void; backLabel: string },
   ): void {
-    const copyBtn = this.button('Copy', '.alt.small', async () => {
+    const copyBtn = this.button(L('Kopyahin', 'Copy text'), '.alt.small', async () => {
       const ok = await copyText(`${r.shareText} ${L('Kaya mo bang talunin?', 'Think you can beat that?')} ${location.origin}${location.pathname}`);
       copyBtn.textContent = ok ? L('Nakopya na!', 'Copied!') : L('Hindi ma-copy', "Couldn't copy");
-      setTimeout(() => (copyBtn.textContent = 'Copy'), 1600);
+      setTimeout(() => (copyBtn.textContent = L('Kopyahin', 'Copy text')), 1600);
     });
-    const shareBtn = this.button(L('I-share', 'Share'), '.alt', async () => {
+    const shareBtn = this.button(L('I-share', 'Share'), '.alt.small', async () => {
       shareBtn.textContent = L('Sandali...', 'One moment...');
       const res = await shareResultImage({
         game: r.gameName, score: r.score, label: r.scoreLabel, stars: extra.stars ?? 0, name: this.playerName,
@@ -331,14 +366,15 @@ export class Menus {
         : L('Unang score mo dito!', 'Your first score here!')
       : `Best: ${extra.best}`;
     const retryBtn = o.onRetry ? this.button(o.retryLabel ?? L('Ulit!', 'Again!'), '', o.onRetry) : null;
-    const card = el(
-      'div.card.end',
-      {},
-      // endless games rarely "win": earning stars still deserves praise
-      el(`h2.${r.won || (extra.stars ?? 0) >= 1 ? 'good' : 'bad'}` as 'h2', { text: r.won ? L('Panalo!', 'You win!') : (extra.stars ?? 0) >= 1 ? L('Ayos!', 'Nice!') : L('Talo ka!', 'You lost!') }),
-      el('p', { text: r.gameName }),
+    // endless games rarely "win": earning stars still deserves praise
+    const verdict = r.won ? L('Panalo!', 'You win!') : (extra.stars ?? 0) >= 1 ? L('Ayos!', 'Nice!') : L('Talo ka!', 'You lost!');
+    const card = this.panel('.end', {
+      title: verdict,
+      titleCls: r.won || (extra.stars ?? 0) >= 1 ? '.good' : '.bad',
+      head: [el('p.game-name', { text: r.gameName })],
+      body: [
       el('div.score', { text: String(r.score) }),
-      el('p', { text: r.scoreLabel }),
+      el('p.score-label', { text: r.scoreLabel }),
       extra.stars !== undefined
         ? el((extra.newStars ? 'div.stars.new' : 'div.stars') as 'div', {}, ...[0, 1, 2].map((i) => el((i < (extra.stars ?? 0) ? 'span.on' : 'span') as 'span', { text: '★', attrs: { style: `animation-delay:${0.25 + i * 0.22}s` } })))
         : null,
@@ -350,13 +386,19 @@ export class Menus {
       extra.rivalMsg ? el('div.badge.rival', { text: extra.rivalMsg }) : null,
       extra.eventMsg ? el('div.badge.event', { text: extra.eventMsg }) : null,
       extra.tourLines ? el('div.tour', {}, ...extra.tourLines.map((l, i) => el(i ? 'div' : 'b', { text: l }))) : null,
-      el('div.lines', {}, ...r.lines.map((l) => el('div', { text: l })),
-        el('div', { text: `+${r.points} Tropa Points${extra.barya !== undefined ? `  ·  ${extra.barya} Barya` : ''}` }),
-        extra.nudge ? el('div.nudge', { text: extra.nudge }) : null),
-      el('div.btns', {}, retryBtn, this.button(o.backLabel, '.alt', o.onBack), shareBtn, copyBtn),
-      o.retryNote ? el('p', { text: o.retryNote }) : null,
-      retryBtn && !this.isTouch() ? el('p.hint', { text: L('Pindutin ang R o Enter para umulit', 'Press R or Enter to play again') }) : null,
-    );
+      el('div.earned', {},
+        el('span.wallet-pill.tp', { text: `+${r.points} Tropa Points` }),
+        extra.barya !== undefined ? el('span.wallet-pill', {}, el('i.coin'), document.createTextNode(`${extra.barya} Barya`)) : null),
+      extra.nudge ? el('div.nudge', { text: extra.nudge }) : null,
+      el('div.lines', {}, ...r.lines.map((l) => el('div', { text: l }))),
+      ],
+      foot: [
+        el('div.btns.main', {}, retryBtn, this.button(o.backLabel, '.alt', o.onBack)),
+        el('div.btns.share', {}, shareBtn, copyBtn),
+        o.retryNote ? el('p.hint', { text: o.retryNote }) : null,
+        retryBtn && !this.isTouch() ? el('p.hint', { text: L('R o Enter para umulit', 'R or Enter to play again') }) : null,
+      ],
+    });
     this.open('end', card);
     if (o.onRetry) {
       const go = o.onRetry;
@@ -512,10 +554,12 @@ export class Menus {
   private topGame = '';
   private topPeriod: 'week' | 'all' = 'week';
 
+  private badgeFilter: 'all' | 'got' | 'locked' = 'all';
+
   showBook(tab: 'hamon' | 'badges' | 'rekord' | 'top', back: () => void): void {
     const d = this.save.data;
     const info = this.cb.bookInfo();
-    const tabs: [typeof tab, string][] = [['hamon', L('Hamon', 'Today')], ['top', 'Top'], ['badges', 'Badges'], ['rekord', L('Rekord', 'Records')]];
+    const tabs: [typeof tab, string][] = [['hamon', L('Ngayon', 'Today')], ['top', 'Top'], ['badges', 'Badges'], ['rekord', L('Rekord', 'Records')]];
     const tabRow = el('div.seg.tabs', {}, ...tabs.map(([id, label]) => {
       const b = el((id === tab ? 'button.on' : 'button') as 'button', { text: label });
       onTap(b, () => {
@@ -524,34 +568,69 @@ export class Menus {
       });
       return b;
     }));
-    const wallet = el('div.wallet', { text: `${d.barya} Barya  ·  ${d.tropaPoints} Tropa Points  ·  ${RANKS[rankIndex(d.tropaPoints)].name}` });
     let body: HTMLElement;
 
     if (tab === 'hamon') {
+      const doneCount = d.quests.done.filter(Boolean).length;
       body = el('div.list', {},
-        el('div.item' + (info.daily.done ? '.done' : '') as 'div', {},
-          el('b', { text: L('Hamon ng Araw', 'Daily Challenge') }),
-          el('span', { text: info.daily.done ? L('Tapos na! Balik bukas.', 'Done! Come back tomorrow.') : L(`${info.daily.name}: ${info.daily.target}+ puntos  ·  +${info.daily.reward} Tropa Points`, `${info.daily.name}: score ${info.daily.target}+  ·  +${info.daily.reward} Tropa Points`) }),
-          el('small', { text: info.daily.streak > 0 ? L(`${info.daily.streak} araw sunod-sunod`, `${info.daily.streak}-day streak`) : L('Simulan ang streak mo!', 'Start your streak today!') })),
-        el('h3', { text: L('Gawain ngayon', "Today's quests") }),
+        el('div.item.hero' + (info.daily.done ? '.done' : '') as 'div', {},
+          el('span.kicker', { text: L('HAMON NG ARAW', 'DAILY CHALLENGE') }),
+          el('b', { text: info.daily.done ? L('Tapos na! Balik bukas.', 'Done! Come back tomorrow.') : L(`${info.daily.name}: ${info.daily.target}+ puntos`, `${info.daily.name}: score ${info.daily.target}+`) }),
+          el('small', { text: (info.daily.done ? '' : L(`Gantimpala: +${info.daily.reward} Tropa Points  ·  `, `Reward: +${info.daily.reward} Tropa Points  ·  `)) + (info.daily.streak > 0 ? L(`🔥 ${info.daily.streak} araw sunod-sunod`, `🔥 ${info.daily.streak}-day streak`) : L('Simulan ang streak mo!', 'Start your streak today!')) })),
+        el('h3', { text: L(`Gawain ngayon  ·  ${doneCount}/3`, `Today's quests  ·  ${doneCount}/3`) }),
         ...info.quests.map((q, i) => {
           const done = d.quests.done[i];
           const prog = Math.min(q.goal, d.quests.prog[i] ?? 0);
-          return el('div.item' + (done ? '.done' : '') as 'div', {},
-            el('b', { text: q.text }),
-            el('span.bar', {}, el('i', { attrs: { style: `width:${(prog / q.goal) * 100}%` } })),
-            el('small', { text: done ? L(`Tapos! +${QUEST_BARYA} Barya`, `Done! +${QUEST_BARYA} Barya`) : `${prog}/${q.goal}  ·  +${QUEST_BARYA} Barya` }));
+          return el('div.item.quest' + (done ? '.done' : '') as 'div', {},
+            el('span.check', { text: done ? '✓' : String(i + 1) }),
+            el('div.qtext', {},
+              el('b', { text: q.text }),
+              el('span.bar', {}, el('i', { attrs: { style: `width:${(prog / q.goal) * 100}%` } })),
+              el('small', { text: done ? L(`Tapos! +${QUEST_BARYA} Barya`, `Done! +${QUEST_BARYA} Barya`) : `${prog}/${q.goal}  ·  +${QUEST_BARYA} Barya` })));
         }),
         el('p.hint', { text: L(`Tapusin lahat ng tatlo para sa bonus na ${QUEST_ALL_BONUS} Barya. Bagong gawain bawat araw.`, `Finish all three for a ${QUEST_ALL_BONUS} Barya bonus. New quests every day.`) }),
       );
     } else if (tab === 'badges') {
       const got = BADGES.filter((b) => d.badges[b.id]).length;
+      const filters: [typeof this.badgeFilter, string][] = [
+        ['all', L(`Lahat (${BADGES.length})`, `All (${BADGES.length})`)],
+        ['got', L(`Nakuha (${got})`, `Earned (${got})`)],
+        ['locked', L(`Hindi pa (${BADGES.length - got})`, `Locked (${BADGES.length - got})`)],
+      ];
+      const chips = el('div.chips', {}, ...filters.map(([id, label]) => {
+        const c = el((this.badgeFilter === id ? 'button.chip.on' : 'button.chip') as 'button', { text: label });
+        onTap(c, () => {
+          this.cb.onUiSound();
+          this.badgeFilter = id;
+          this.showBook('badges', back);
+        });
+        return c;
+      }));
+      // earned first, then the ones you're closest to
+      const closeness = (b: (typeof BADGES)[number]) => {
+        if (d.badges[b.id]) return 2;
+        const p = b.progress?.(d);
+        return p ? Math.min(1, p[0] / p[1]) : 0;
+      };
+      const list = BADGES
+        .filter((b) => this.badgeFilter === 'all' || (this.badgeFilter === 'got') === !!d.badges[b.id])
+        .sort((a, b) => closeness(b) - closeness(a));
       body = el('div.list', {},
-        el('p', { text: L(`${got} sa ${BADGES.length} na badge`, `${got} of ${BADGES.length} badges`) }),
-        el('div.grid', {}, ...BADGES.map((b) => el(('div.bdg' + (d.badges[b.id] ? '.got' : '')) as 'div', {},
-          el('b', { text: d.badges[b.id] ? b.name : '???' }),
-          el('small', { text: b.desc }),
-          el('i', { text: d.badges[b.id] ? L(`Nakuha ${d.badges[b.id]}`, `Earned ${d.badges[b.id]}`) : `+${b.barya} Barya` })))),
+        el('div.badge-summary', {},
+          el('b', { text: L(`${got} sa ${BADGES.length} na badge`, `${got} of ${BADGES.length} badges`) }),
+          el('span.bar', {}, el('i', { attrs: { style: `width:${(got / BADGES.length) * 100}%` } }))),
+        chips,
+        list.length
+          ? el('div.grid', {}, ...list.map((b) => {
+              const earned = !!d.badges[b.id];
+              const p = !earned ? b.progress?.(d) : undefined;
+              return el(('div.bdg' + (earned ? '.got' : '')) as 'div', {},
+                el('div.bdg-top', {}, el('span.medal', { text: earned ? '★' : '🔒' }), el('b', { text: b.name })),
+                el('small', { text: b.desc }),
+                p ? el('div.bdg-prog', {}, el('span.bar', {}, el('i', { attrs: { style: `width:${Math.min(1, p[0] / p[1]) * 100}%` } })), el('em', { text: `${Math.min(p[0], p[1])}/${p[1]}` })) : null,
+                el('i', { text: earned ? L(`Nakuha ${d.badges[b.id]}`, `Earned ${d.badges[b.id]}`) : `+${b.barya} Barya` }));
+            }))
+          : el('p', { text: L('Wala pa dito. Maglaro para makakuha!', 'Nothing here yet. Play to earn some!') }),
       );
     } else if (tab === 'top') {
       if (!info.games.some((g) => g.id === this.topGame)) this.topGame = info.games[0]?.id ?? '';
@@ -599,8 +678,16 @@ export class Menus {
       }));
     }
 
-    const card = el('div.card.book', {}, el('h2', { text: L('Libro ng Barangay', 'Barangay Book') }), wallet, tabRow, body, el('div.btns', {}, this.button(L('Balik', 'Back'), '', back)));
+    const card = this.panel('.book', {
+      title: L('Libro ng Barangay', 'Barangay Book'),
+      head: [this.walletPills(), tabRow],
+      body: [body],
+      onClose: back,
+    });
     this.open('book', card);
+    this.setKeys((e) => {
+      if (e.key === 'Escape') back();
+    });
   }
 
   // --------------------------------------------------------------- multiplayer
@@ -733,26 +820,29 @@ export class Menus {
     onLobby: () => void;
     onClose: () => void;
   }): void {
-    const card = el(
-      'div.card.settings',
-      {},
-      el('h2', { text: o.name }),
-      el('p.blurb', { text: o.blurb }),
-      el('details.howto', {}, el('summary', { text: L('Paano laruin?', 'How to play') }), el('ol', {}, ...o.howTo.map((x) => el('li', { text: x })))),
-      el('p', { text: L('Mag-isa o kasama ang tropa?', 'Play solo or with friends?') }),
-      o.lockedMsg ? el('p', { text: o.lockedMsg }) : null,
-      this.nameField(),
-      this.faceField(),
-      el(
-        'div.btns.col',
-        {},
-        o.canSolo ? this.button(L('Mag-isa', 'Play solo'), '', o.onSolo) : null,
-        o.inLobby ? this.button(L('Laruin ito sa lobby', 'Play this in the lobby'), '.alt', o.onCreate) : this.button(L('Gumawa ng lobby', 'Create a lobby'), '.alt', o.onCreate),
-        o.inLobby ? null : this.button(L('Sumali gamit ang code', 'Join with a code'), '.alt', o.onJoin),
-        this.button(L('Isara', 'Close'), '.alt.small', o.onClose),
-      ),
-    );
+    // how to play is open the first time; the profile (name + face) is tucked away
+    const howTo = el('details.howto', {}, el('summary', { text: L('Paano laruin?', 'How to play') }), el('ol', {}, ...o.howTo.map((x) => el('li', { text: x }))));
+    howTo.open = true;
+    const profile = el('details.howto.profile', {}, el('summary', { text: L(`Ikaw: ${this.playerName}  (palitan)`, `You: ${this.playerName}  (change)`) }), this.nameField(), this.faceField());
+    const card = this.panel('.game', {
+      title: o.name,
+      head: [el('p.blurb', { text: o.blurb })],
+      onClose: o.onClose,
+      body: [howTo, o.lockedMsg ? el('p', { text: o.lockedMsg }) : null, profile],
+      foot: [
+        o.canSolo ? this.button(L('▶  Maglaro mag-isa', '▶  Play solo'), '.big', o.onSolo) : null,
+        el('div.btns', {},
+          o.inLobby
+            ? this.button(L('Laruin ito sa lobby', 'Play this in the lobby'), '.alt', o.onCreate)
+            : this.button(L('Gumawa ng lobby', 'Create a lobby'), '.alt', o.onCreate),
+          o.inLobby ? null : this.button(L('Sumali sa code', 'Join with code'), '.alt', o.onJoin)),
+        el('p.hint', { text: L('Lobby = maglaro kasama ang tropa gamit ang 4 na letrang code.', 'Lobby = play with friends using a 4-letter code.') }),
+      ],
+    });
     this.open('game', card);
+    this.setKeys((e) => {
+      if (e.key === 'Escape') o.onClose();
+    });
   }
 
   showBusy(text: string): void {

@@ -24,7 +24,9 @@ import type { HubLayout } from './types';
  *  - the power meter shows a green zone for the distance to the target, the
  *    landing ring turns green when the toss will count, and a toss a little
  *    off the square still counts (aim assist)
- *  - the first missed toss on each square is free
+ *  - the first missed toss on squares 1-4 is free
+ *  - higher squares are harder to hit: faster power sweep, less aim assist,
+ *    and the aim sways side to side (shown live by the landing ring)
  *  - pressing outside the green makes you wobble once before you fall
  */
 
@@ -37,6 +39,11 @@ const FACE_FWD = -Math.PI / 2; // looking along +X
 const PITCH = -0.62;
 /** Seconds for the power marker to sweep 0 -> 1. */
 const POWER_SWEEP = 1.7;
+/** Each higher square makes the toss harder: faster sweep, less assist, a shakier hand. */
+const SWEEP_PER_SQUARE = 0.09;
+const SWAY_PER_SQUARE = 0.035;
+/** The first missed toss is free only on the easy squares. */
+const FREE_MISS_UP_TO = 4;
 /** Toss distance = MIN_TOSS + power * TOSS_RANGE. */
 const MIN_TOSS = 0.6;
 const TOSS_RANGE = 6.0;
@@ -289,8 +296,8 @@ export class Piko extends BaseGame {
   private targetZone(): [number, number] {
     const c = CELLS.find((x) => x.n === this.target)!;
     const p = this.ctx.player.position;
-    const near = Math.hypot(c.x0 - ASSIST * 0.5 - p.x, (c.z0 + c.z1) / 2 - p.z);
-    const far = Math.hypot(c.x1 + ASSIST * 0.5 - p.x, (c.z0 + c.z1) / 2 - p.z);
+    const near = Math.hypot(c.x0 - this.assist * 0.5 - p.x, (c.z0 + c.z1) / 2 - p.z);
+    const far = Math.hypot(c.x1 + this.assist * 0.5 - p.x, (c.z0 + c.z1) / 2 - p.z);
     return [THREE.MathUtils.clamp((near - MIN_TOSS) / TOSS_RANGE, 0, 1), THREE.MathUtils.clamp((far - MIN_TOSS) / TOSS_RANGE, 0, 1)];
   }
 
@@ -303,7 +310,7 @@ export class Piko extends BaseGame {
     const dx = Math.max(t.x0 - p.x, 0, p.x - t.x1);
     const dz = Math.max(t.z0 - p.z, 0, p.z - t.z1);
     const m = 0.1; // keep the stone clear of the chalk lines
-    if (Math.hypot(dx, dz) <= ASSIST) {
+    if (Math.hypot(dx, dz) <= this.assist) {
       const at = new THREE.Vector3(THREE.MathUtils.clamp(p.x, t.x0 + m, t.x1 - m), p.y, THREE.MathUtils.clamp(p.z, t.z0 + m, t.z1 - m));
       return { at, cell: t, ok: true };
     }
@@ -329,7 +336,7 @@ export class Piko extends BaseGame {
             this.power = 0;
             this.powerDir = 1;
           }
-          this.power += (this.powerDir * dt) / POWER_SWEEP;
+          this.power += (this.powerDir * dt) / (POWER_SWEEP - (this.target - 1) * SWEEP_PER_SQUARE);
           if (this.power >= 1) {
             this.power = 1;
             this.powerDir = -1;
@@ -465,6 +472,11 @@ export class Piko extends BaseGame {
 
   // ================================================================== toss
 
+  /** Aim assist shrinks as the target square goes up (0.14 m on 1, ~0 on 8). */
+  private get assist(): number {
+    return Math.max(0.02, ASSIST + 0.02 - this.target * 0.02);
+  }
+
   private landingPoint(): THREE.Vector3 {
     const cam = this.ctx.camera;
     const f = new THREE.Vector3();
@@ -472,7 +484,14 @@ export class Piko extends BaseGame {
     f.y = 0;
     f.normalize();
     const dist = MIN_TOSS + this.power * TOSS_RANGE;
-    return new THREE.Vector3(this.ctx.player.position.x + f.x * dist, 0.015, this.ctx.player.position.z + f.z * dist);
+    // a shakier hand on the far squares: the aim sways side to side (the ring shows it, so it can be timed)
+    const t = performance.now() / 1000;
+    const sway = (this.target - 1) * SWAY_PER_SQUARE * (Math.sin(t * 2.3) * 0.7 + Math.sin(t * 3.7 + 1) * 0.3);
+    return new THREE.Vector3(
+      this.ctx.player.position.x + f.x * dist - f.z * sway,
+      0.015,
+      this.ctx.player.position.z + f.z * dist + f.x * sway,
+    );
   }
 
   private previewToss(): void {
@@ -502,7 +521,7 @@ export class Piko extends BaseGame {
     if (!j.ok) {
       const msg = !j.cell ? L('Labas sa kahon ang pamato!', 'The stone missed the grid!') : L(`Sa ${j.cell.n === 9 ? 'langit' : j.cell.n} napunta, hindi sa ${this.target}!`, `It landed in ${j.cell.n === 9 ? 'langit' : j.cell.n}, not ${this.target}!`);
       this.tossMisses++;
-      if (this.tossMisses === 1) {
+      if (this.tossMisses === 1 && this.target <= FREE_MISS_UP_TO) {
         // first miss on each square is free
         this.ctx.hud.toast(`${msg} ${L('Isa pa, libre!', 'Free retry!')}`, 'small', 1400);
         this.ctx.audio.play('thud', { vol: 0.5 });
