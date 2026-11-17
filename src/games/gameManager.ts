@@ -8,7 +8,9 @@ import {
   type Badge, type Finish, type NightEvent, type Quest,
 } from '../core/meta';
 import { Session } from '../net/session';
-import { submitScore } from '../net/leaderboard';
+import { fetchTop, submitScore, type BoardRow } from '../net/leaderboard';
+import { Blackboard } from '../world/blackboard';
+import { BADGES } from '../core/meta';
 import type { Menus } from '../ui/menus';
 import { NpcGroup } from '../world/npcs';
 import type { BaseGame } from './baseGame';
@@ -43,6 +45,9 @@ interface Tour {
 }
 const TOUR_PTS = [5, 3, 2, 1, 0, 0];
 const TAUNT_RADIUS = 6.5;
+/** Plaza chalkboard: beside the spawn point, angled toward it and the road. */
+const BOARD = { x: 1.0, z: 8.9, rot: Math.atan2(-2.5, -1.7) };
+const BOARD_REACH = 2.6;
 
 /**
  * Owns the street games, their NPC groups in the hub, the interact system,
@@ -65,9 +70,14 @@ export class GameManager {
   /** Hub banter: which spot the player is near, and when each rival last spoke. */
   private nearSpot: BaseGame | null = null;
   private tauntAt = new Map<string, number>();
+  private board: Blackboard;
+  private boardT = 0;
+  private topT = 0;
+  private top: { game: string; rows: BoardRow[] | null } = { game: '', rows: null };
 
   constructor(base: Omit<GameContext, 'finish'>, private save: SaveStore, private menus: Menus, private hooks: ManagerHooks) {
     this.ctx = { ...base, finish: (r) => this.finish(r) };
+    this.board = new Blackboard(base.scene, base.physics, BOARD.x, BOARD.z, BOARD.rot);
     for (const g of this.games) {
       const L = g.layout;
       const group = new NpcGroup(base.scene, L.spot, L.kids, L.labelPos, base.blobs, base.groundAt);
@@ -126,6 +136,40 @@ export class GameManager {
     return nameTagSub(this.save.data);
   }
 
+  /** Keep the plaza chalkboard current (redraws only when something changed). */
+  private updateBoard(dt: number): void {
+    this.boardT -= dt;
+    this.topT -= dt;
+    const d = this.daily();
+    if (this.topT <= 0 || this.top.game !== d.gameId) {
+      this.topT = 60;
+      const want = d.gameId;
+      this.top = { game: want, rows: this.top.game === want ? this.top.rows : null };
+      fetchTop(want, 'week').then((rows) => {
+        if (this.top.game === want) this.top.rows = rows;
+        this.boardT = 0;
+      });
+    }
+    if (this.boardT > 0) return;
+    this.boardT = 1;
+    const data = this.save.data;
+    rollQuests(data);
+    const ev = this.hooks.event();
+    const qs = this.quests();
+    this.board.draw({
+      date: new Date().toLocaleDateString('fil-PH', { weekday: 'long', month: 'long', day: 'numeric' }),
+      rank: rankFor(data.tropaPoints).name,
+      tropa: data.tropaPoints,
+      barya: data.barya,
+      streak: data.streak,
+      daily: { name: this.gameById(d.gameId)?.name ?? d.gameId, target: d.target, reward: dailyReward(data.streak), done: this.dailyDoneToday() },
+      quests: qs.map((q, i) => ({ text: q.text, prog: data.quests.prog[i] ?? 0, goal: q.goal, done: data.quests.done[i] ?? false })),
+      event: ev ? ev.chip : null,
+      top: { game: this.gameById(d.gameId)?.name ?? d.gameId, rows: this.top.rows ? this.top.rows.slice(0, 3) : null },
+      badges: { got: BADGES.filter((b) => data.badges[b.id]).length, total: BADGES.length },
+    });
+  }
+
   daily(): { gameId: string; target: number } {
     return dailyChallenge(this.games.filter((g) => g.implemented).map((g) => g.id));
   }
@@ -160,6 +204,7 @@ export class GameManager {
   update(dt: number, t: number, camPos: THREE.Vector3, controlsActive: boolean, simulate: boolean): void {
     for (const g of this.games) g.group.update(dt, t, camPos, g === this.active);
     const { hud, touch, input, player, isTouch } = this.ctx;
+    this.updateBoard(dt);
 
     if (this.active) {
       if (!this.ended && simulate) this.active.update(dt, t);
@@ -177,6 +222,18 @@ export class GameManager {
       }
     }
     this.hubBanter(player.position, controlsActive);
+    // the plaza chalkboard opens the Libro
+    const bd = Math.hypot(this.board.front.x - player.position.x, this.board.front.z - player.position.z);
+    if (controlsActive && bd < BOARD_REACH && (!best || bd < bestD)) {
+      hud.setPrompt('Libro ng Barangay', isTouch() ? undefined : 'E');
+      touch.setInteractReady(true);
+      if (input.pressed('interact')) {
+        this.ctx.audio.play('ui');
+        this.hooks.onModal(true);
+        this.menus.showBook('hamon', () => this.closeMenu());
+      }
+      return;
+    }
     if (!best || !controlsActive) {
       hud.setPrompt(null);
       touch.setInteractReady(false);
