@@ -218,8 +218,8 @@ export class GameManager {
       const d = this.daily();
       const g = this.gameById(d.gameId)!;
       return L(
-        `Hamon ngayon: ${g.name}, ${d.target}+ puntos (+${dailyReward(this.save.data.streak)} Tropa) ${g.where}`,
-        `Today's challenge: score ${d.target}+ in ${g.name} (+${dailyReward(this.save.data.streak)} Tropa), ${g.where}`,
+        `Hamon ngayon: ${g.name}, ${d.target}+ puntos (+${dailyReward(this.save.data.streak)} Tropa Points) ${g.where}`,
+        `Today's challenge: score ${d.target}+ in ${g.name} (+${dailyReward(this.save.data.streak)} Tropa Points), ${g.where}`,
       );
     }
     const next = this.games.find((g, i) => this.isPlayable(i) && this.save.data.best[g.id] === undefined);
@@ -495,14 +495,14 @@ export class GameManager {
     if (mult !== 1 && r.points > 0) {
       const extra = Math.round(r.points * (mult - 1));
       r.points += extra;
-      eventMsg = `${ev!.name}: +${extra} Tropa (x${mult})`;
+      eventMsg = `${ev!.name}: +${extra} Tropa Points (x${mult})`;
     }
-    // a treat from the store boosts this game's Tropa
+    // a treat from the store boosts this game's Tropa Points
     if (data.boost > 0 && r.points > 0) {
       const extra = Math.round(r.points * (TREAT_MULT - 1));
       r.points += extra;
       data.boost--;
-      const note = L(`Pampalamig: +${extra} Tropa`, `Treat bonus: +${extra} Tropa`);
+      const note = L(`Pampalamig: +${extra} Tropa Points`, `Treat bonus: +${extra} Tropa Points`);
       eventMsg = eventMsg ? `${eventMsg}  ·  ${note}` : note;
     }
     // stars
@@ -517,7 +517,7 @@ export class GameManager {
       data.dailyDone = today();
       const bonus = dailyReward(data.streak - 1);
       r.points += bonus;
-      dailyMsg = L(`Hamon ng Araw, tapos! +${bonus} Tropa  ·  ${data.streak} araw sunod-sunod`, `Daily challenge done! +${bonus} Tropa  ·  ${data.streak}-day streak`);
+      dailyMsg = L(`Hamon ng Araw, tapos! +${bonus} Tropa Points  ·  ${data.streak} araw sunod-sunod`, `Daily challenge done! +${bonus} Tropa Points  ·  ${data.streak}-day streak`);
     }
     // rival (solo or multiplayer, your own score counts)
     let rivalMsg: string | undefined;
@@ -588,7 +588,7 @@ export class GameManager {
     else if (gap && gap.gap <= Math.max(5, r.score * 0.3)) nudge = L(`Kulang ka na lang ng ${gap.gap} para sa ${starText(gap.stars)}!`, `Just ${gap.gap} more for ${starText(gap.stars)}!`);
     else {
       const nr = nextRank(data.tropaPoints);
-      if (nr) nudge = L(`${nr.at - data.tropaPoints} Tropa pa para maging ${nr.name}`, `${nr.at - data.tropaPoints} more Tropa to become ${nr.name}`);
+      if (nr) nudge = L(`${nr.at - data.tropaPoints} Tropa Points pa para maging ${nr.name}`, `${nr.at - data.tropaPoints} more Tropa Points to become ${nr.name}`);
     }
     this.save.persist();
     this.refreshLabels();
@@ -658,7 +658,7 @@ export class GameManager {
     this.save.persist();
     this.ctx.hud.setPoints(data.tropaPoints);
     this.ctx.hud.setRank(this.progressText());
-    this.ctx.hud.toast(L('Sorbetes! +20 Tropa, +15 Barya', 'Ice cream! +20 Tropa, +15 Barya'), 'good', 2000);
+    this.ctx.hud.toast(L('Sorbetes! +20 Tropa Points, +15 Barya', 'Ice cream! +20 Tropa Points, +15 Barya'), 'good', 2000);
     this.ctx.audio.play('pickup');
     if (badges.length) this.hooks.onBadges(badges);
   }

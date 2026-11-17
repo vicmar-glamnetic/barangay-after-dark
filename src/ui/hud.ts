@@ -33,7 +33,7 @@ export class Hud {
   private cache = new Map<string, string>();
 
   constructor(parent: HTMLElement, onPause: () => void) {
-    this.pointsEl.append(el('span.star', { text: '★' }), this.pointsNum, el('span', { text: 'Tropa' }));
+    this.pointsEl.append(el('span.star', { text: '★' }), this.pointsNum, el('span', { text: 'Tropa Points' }));
     this.power.append(this.powerFill);
     this.meter.append(this.meterZone, this.meterMark, this.meterLabel);
     this.root.append(this.meter, this.crosshair, this.pointsEl, this.rank, this.eventEl, this.objective, this.stat, this.prompt, this.bigEl, this.power, this.timer, this.toastEl, this.fps, this.clickHint, this.pauseBtn);
@@ -62,7 +62,7 @@ export class Hud {
     this.set('rank', this.rank, text);
   }
 
-  /** Night event chip ("FIESTA: x2 Tropa  2:31"). null hides it. */
+  /** Night event chip ("FIESTA: x2 Tropa Points  2:31"). null hides it. */
   setEvent(text: string | null, kind = ''): void {
     this.eventEl.classList.toggle('hidden', text === null);
     if (text === null) return;

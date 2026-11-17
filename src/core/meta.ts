@@ -136,7 +136,7 @@ export function dailyQuests(gameIds: string[], names: Record<string, string>, da
     { kind: 'stars', gameId: g1, goal: 2, text: L(`Makakuha ng ★★ sa ${n1}`, `Get ★★ in ${n1}`) },
     (h >>> 16) % 2
       ? { kind: 'score', gameId: g2, goal: s2, text: L(`Umabot ng ${s2} puntos sa ${n2}`, `Score ${s2}+ in ${n2}`) }
-      : { kind: 'tropa', goal: 150, text: L('Mag-ipon ng 150 Tropa ngayon', 'Earn 150 Tropa today') },
+      : { kind: 'tropa', goal: 150, text: L('Mag-ipon ng 150 Tropa Points ngayon', 'Earn 150 Tropa Points today') },
   ];
   return quests;
 }
@@ -239,7 +239,7 @@ export const rivalReward = (level: number) => 25 + level * 20;
 
 export interface ShopItem {
   id: string;
-  /** treat = a drink/snack that boosts the next games' Tropa (used up, not kept). */
+  /** treat = a drink/snack that boosts the next games' Tropa Points (used up, not kept). */
   kind: 'slipper' | 'title' | 'treat';
   name: string;
   nameEn?: string;
@@ -252,7 +252,7 @@ export interface ShopItem {
   tint?: number;
 }
 
-/** Tropa multiplier while a treat is active. */
+/** Tropa Points multiplier while a treat is active. */
 export const TREAT_MULT = 1.25;
 
 export const SHOP: ShopItem[] = [
@@ -307,7 +307,7 @@ export interface NightEvent {
   readonly chip: string;
   /** Toast when it starts. */
   readonly start: string;
-  /** Tropa multiplier for games finished during it (per game id, '*' = all). */
+  /** Tropa Points multiplier for games finished during it (per game id, '*' = all). */
   mult: Record<string, number>;
 }
 
@@ -319,9 +319,9 @@ const ev = (id: EventId, name: [string, string], chip: [string, string], start: 
 });
 
 export const EVENTS: Record<EventId, NightEvent> = {
-  fiesta: ev('fiesta', ['Fiesta', 'Fiesta'], ['FIESTA: x2 Tropa', 'FIESTA: double Tropa'], ['Fiesta sa barangay! Doble ang Tropa Points!', 'Fiesta in the barangay! Double Tropa Points!'], { '*': 2 }),
+  fiesta: ev('fiesta', ['Fiesta', 'Fiesta'], ['FIESTA: x2 Tropa Points', 'FIESTA: double Tropa Points'], ['Fiesta sa barangay! Doble ang Tropa Points!', 'Fiesta in the barangay! Double Tropa Points!'], { '*': 2 }),
   brownout: ev('brownout', ['Brownout', 'Brownout'], ['BROWNOUT: Taguan x2', 'POWER OUT: Taguan x2'], ['Brownout! Perfect sa Taguan. x2 doon!', 'Power outage! Perfect for hide and seek: Taguan pays double!'], { taguan: 2, '*': 1.2 }),
-  ulan: ev('ulan', ['Ulan', 'Rain'], ['UMUULAN: x1.5 Tropa', 'RAIN: x1.5 Tropa'], ['Umuulan! Basa pero masaya. x1.5 Tropa!', "It's raining! Wet but fun. x1.5 Tropa!"], { '*': 1.5 }),
+  ulan: ev('ulan', ['Ulan', 'Rain'], ['UMUULAN: x1.5 Tropa Points', 'RAIN: x1.5 Tropa Points'], ['Umuulan! Basa pero masaya. x1.5 Tropa Points!', "It's raining! Wet but fun. x1.5 Tropa Points!"], { '*': 1.5 }),
   sorbetero: ev('sorbetero', ['Sorbetero', 'Ice Cream Cart'], ['SORBETERO: hanapin siya!', 'ICE CREAM: find the cart!'], ['Ting-ting-ting! May sorbetero! Hanapin mo.', 'Ting-ting-ting! The ice cream man is here. Go find him!'], {}),
 };
 
@@ -385,7 +385,7 @@ export function slipperChoices(d: SaveData): SlipperChoice[] {
   return [
     ...SLIPPERS.map((s) => ({
       id: s.id, name: s.name, strap: s.strap, top: s.top, unlocked: s.rank <= have,
-      need: L(`Ranggo: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa)`, `Rank: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa)`),
+      need: L(`Ranggo: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa Points)`, `Rank: ${RANKS[s.rank].name} (${RANKS[s.rank].at} Tropa Points)`),
     })),
     ...SHOP.filter((it) => it.kind === 'slipper').map((it) => ({
       id: it.id, name: itemName(it), strap: it.colors![0], top: it.colors![1], unlocked: d.owned.includes(it.id),

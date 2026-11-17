@@ -194,7 +194,7 @@ export function courtTexture(): THREE.CanvasTexture {
   g.font = `800 ${Math.round(s * 0.9)}px ${FONT}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText('BRGY. 143', W / 2, H / 2);
+  g.fillText('BRGY. TIBAY', W / 2, H / 2);
   // chalk patintero grid (rough, hand drawn)
   g.strokeStyle = 'rgba(255,250,215,0.8)';
   g.lineWidth = 4;

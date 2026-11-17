@@ -13,12 +13,13 @@ import type { HubLayout } from './types';
  * Score = kick streak. Kicking too early whiffs and costs a short cooldown,
  * so mashing does not work.
  *
- * Multiplayer: everyone kicks their own sipa side by side in front of the
- * store. Each client simulates its own sipa and reports its streak; the host
+ * Multiplayer: everyone kicks their own sipa side by side on the sidewalk in
+ * front of the pink house. Each client simulates its own sipa and reports its streak; the host
  * keeps the leaderboard and ends the game when everyone has dropped theirs.
  */
 
-const SPOT = new THREE.Vector3(6, 0.12, -4.5);
+/** On the sidewalk in front of the pink house (clear of the store, lamp posts and parked jeepney). */
+const SPOT = new THREE.Vector3(16, 0.12, -4.3);
 const AHEAD = 1.35; // sipa distance in front of the player
 const ZONE_Y = 0.62; // kick height
 const WINDOW = 0.3; // +/- meters around the zone that count as a kick
@@ -32,7 +33,7 @@ export class Sipa extends BaseGame {
   readonly id = 'sipa';
   readonly name = 'Sipa';
   readonly implemented = true;
-  get where() { return L('sa harap ng sari-sari store', 'in front of the sari-sari store'); }
+  get where() { return L('sa bangketa sa harap ng pink na bahay', 'on the sidewalk in front of the pink house'); }
   get blurb() { return L('Sipain pataas ang sipa nang hindi nahuhulog', 'Keep a feathered washer in the air with your foot'); }
   get howTo() {
     return [
@@ -43,12 +44,12 @@ export class Sipa extends BaseGame {
   }
   readonly layout: HubLayout = {
     spot: SPOT.clone(),
-    labelPos: new THREE.Vector3(6, 3.6, -6.4),
+    labelPos: new THREE.Vector3(16, 3.6, -6.4),
     accent: '#06d6a0',
     kids: [
-      { x: 4.3, z: -6.4, mode: 'idle' },
-      { x: 7.8, z: -6.6, mode: 'wave' },
-      { x: 8.5, z: -5.6, mode: 'idle' },
+      { x: 13.6, z: -6.4, mode: 'idle' },
+      { x: 18.2, z: -6.6, mode: 'wave' },
+      { x: 19.0, z: -5.6, mode: 'idle' },
     ],
   };
 

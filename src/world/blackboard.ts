@@ -152,7 +152,7 @@ export class Blackboard {
     const L = 56;
     chalk(tr('Hamon ng Araw', 'Daily Challenge'), L, 160, 32, '#8ecae6');
     if (d.daily.done) chalk(tr(`${d.daily.name}: TAPOS NA! ✓`, `${d.daily.name}: DONE! ✓`), L, 200, 30, '#8be8b9', 'left', 520);
-    else chalk(tr(`${d.daily.name}: ${d.daily.target}+ puntos  (+${d.daily.reward} Tropa)`, `${d.daily.name}: score ${d.daily.target}+  (+${d.daily.reward} Tropa)`), L, 200, 28, '#f4f1e6', 'left', 540);
+    else chalk(tr(`${d.daily.name}: ${d.daily.target}+ puntos  (+${d.daily.reward} Tropa Points)`, `${d.daily.name}: score ${d.daily.target}+  (+${d.daily.reward} Tropa Points)`), L, 200, 28, '#f4f1e6', 'left', 540);
     chalk(d.streak > 0 ? tr(`Streak: ${d.streak} araw`, `Streak: ${d.streak} days`) : tr('Simulan ang streak mo!', 'Start your streak today!'), L, 234, 24, 'rgba(244,241,230,0.75)');
 
     chalk(tr('Gawain ngayon', "Today's quests"), L, 290, 32, '#8ecae6');
@@ -193,7 +193,7 @@ export class Blackboard {
 
     line(R, 468, W - 50, 468, 'rgba(244,241,230,0.35)');
     chalk(d.rank, R, 508, 28, '#ffd166', 'left', 360);
-    chalk(`${d.tropa} Tropa  ·  ${d.barya} Barya`, R, 542, 24, '#f4f1e6', 'left', 360);
+    chalk(`${d.tropa} Tropa Points  ·  ${d.barya} Barya`, R, 542, 24, '#f4f1e6', 'left', 360);
     chalk(`Badges: ${d.badges.got}/${d.badges.total}`, R, 574, 24, '#f4f1e6');
 
     // footer

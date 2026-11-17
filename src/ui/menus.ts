@@ -373,84 +373,138 @@ export class Menus {
 
   // --------------------------------------------------------------- tindahan (the sari-sari store counter)
 
+  private storeTab: 'treat' | 'slipper' | 'title' = 'treat';
+  private storeNote = '';
+
   showStore(back: () => void, greet = true): void {
     const d = this.save.data;
-    const msg = el('p.err');
-    const sw = (it: ShopItem) => {
-      const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
-      if (it.colors) return el('span.swatch', { attrs: { style: `background:linear-gradient(135deg,${hex(it.colors[1])} 50%,${hex(it.colors[0])} 50%)` } });
-      if (it.tint !== undefined) return el('span.swatch.cup', { attrs: { style: `background:${hex(it.tint)}` } });
-      return el('span.tag', { text: it.name });
-    };
-    const after = () => {
+    const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+    const slipperIndex = (it: ShopItem) => slipperChoices(d).findIndex((c) => c.id === it.id);
+    const after = (note: string) => {
       this.save.persist();
       this.cb.onShop();
+      this.storeNote = note;
       this.showStore(back, false);
     };
-    const slipperIndex = (it: ShopItem) => slipperChoices(d).findIndex((c) => c.id === it.id);
-    const row = (it: ShopItem) => {
+    const coin = (n: number | string) => el('span.coin-amt', {}, el('i.coin'), document.createTextNode(String(n)));
+
+    // ---- one item card
+    const card = (it: ShopItem) => {
       const owned = it.kind !== 'treat' && d.owned.includes(it.id);
       const equipped = it.kind === 'title' ? d.title === it.id : it.kind === 'slipper' && slipperIndex(it) === d.slipper;
+      const short = d.barya < it.price;
+      const art = it.colors
+        ? el('span.art.slip', { attrs: { style: `background:linear-gradient(135deg,${hex(it.colors[1])} 50%,${hex(it.colors[0])} 50%)` } })
+        : it.tint !== undefined
+          ? el('span.art.cup', {}, el('i', { attrs: { style: `background:${hex(it.tint)}` } }))
+          : el('span.art.tagprev', {}, el('b', { text: this.playerName }), el('small', { text: it.name }));
+      // only drinks need a line of their own (what they do); the tab hint covers the rest
+      const sub = it.kind === 'treat'
+        ? L(`x${TREAT_MULT} Tropa Points sa ${it.games} laro`, `x${TREAT_MULT} Tropa Points for ${it.games} game${it.games === 1 ? '' : 's'}`)
+        : '';
+
       let btn: HTMLElement;
-      if (owned) {
-        btn = equipped
-          ? el('button.btn.small.alt', { text: L('Suot', 'Wearing') })
-          : this.button(L('Gamitin', 'Use'), '.small', () => {
-              if (it.kind === 'title') d.title = it.id;
-              else d.slipper = slipperIndex(it);
-              after();
-            });
+      if (equipped) btn = el('button.btn.small.price.on', { text: L('Suot ✓', 'Wearing ✓') });
+      else if (owned)
+        btn = this.button(L('Gamitin', 'Use'), '.small.price.use', () => {
+          if (it.kind === 'title') d.title = it.id;
+          else d.slipper = slipperIndex(it);
+          after(L(`Suot mo na ang ${itemName(it)}.`, `Now using ${itemName(it)}.`));
+        });
+      else if (short) {
+        btn = el('button.btn.small.price.short', {}, el('small', { text: L(`Kulang ${it.price - d.barya}`, `Need ${it.price - d.barya} more`) }));
+        (btn as HTMLButtonElement).disabled = true;
       } else {
-        btn = this.button(`${it.price}`, '.small' + (d.barya < it.price ? '.alt' : ''), () => {
+        // two taps to buy: the first one asks "Sure?"
+        let armed = false;
+        btn = this.button('', '.small.price.buy', () => {
+          if (!armed) {
+            armed = true;
+            btn.replaceChildren(document.createTextNode(L('Bilhin?', 'Buy?')));
+            btn.classList.add('armed');
+            window.setTimeout(() => {
+              if (!btn.isConnected) return;
+              armed = false;
+              btn.classList.remove('armed');
+              btn.replaceChildren(coin(it.price));
+            }, 2500);
+            return;
+          }
           const err = buy(d, it.id);
           if (err) {
-            msg.textContent = err;
+            this.storeNote = err;
+            this.showStore(back, false);
             return;
           }
           if (it.kind === 'title') d.title = it.id;
           else if (it.kind === 'slipper') d.slipper = slipperIndex(it);
           this.cb.onPurchase?.(it);
-          after();
+          after(it.kind === 'treat'
+            ? L(`Salamat! Boost para sa susunod na ${d.boost} laro.`, `Enjoy! Boost active for your next ${d.boost} game${d.boost === 1 ? '' : 's'}.`)
+            : L(`Nabili mo ang ${itemName(it)}! Suot mo na.`, `You bought ${itemName(it)}! It's on.`));
         });
+        btn.replaceChildren(coin(it.price));
       }
-      const label = it.kind === 'title' ? L('Titulo sa name tag', 'Name-tag title')
-        : it.kind === 'treat' ? `${itemName(it)}  ·  ${L(`x${TREAT_MULT} Tropa sa susunod na ${it.games} laro`, `x${TREAT_MULT} Tropa for your next ${it.games} game${it.games === 1 ? '' : 's'}`)}`
-        : itemName(it);
-      return el('div.shop-row', {}, sw(it), el('span', { text: label }), btn);
+      return el((equipped ? 'div.item-card.on' : 'div.item-card') as 'div', {}, art, it.kind === 'title' ? null : el('b', { text: itemName(it) }), sub ? el('small', { text: sub }) : null, btn);
     };
+
+    // ---- header: who's talking, wallet, close
     const lines = [
       L('Ano sa iyo, iho/iha?', 'What can I get you, dear?'),
       L('Bili na, bili na! Bagong dating ang tsinelas!', 'Come, come! New flip-flops just arrived!'),
       L('Pampalamig muna bago maglaro!', 'Something cold before you play?'),
     ];
-    const card = el(
-      'div.card.book.store',
-      {},
-      el('h2', { text: L('Sari-sari Store', 'Sari-sari Store') }),
-      el('p.tindera', { text: `Aling Nena: "${greet ? lines[Math.floor(Math.random() * lines.length)] : L('Salamat! Balik ka ha.', 'Thank you! Come back soon.')}"` }),
-      el('div.wallet', { text: `${d.barya} Barya${d.boost > 0 ? `  ·  ${L(`Boost: ${d.boost} laro pa`, `Boost: ${d.boost} game${d.boost === 1 ? '' : 's'} left`)}` : ''}` }),
-      msg,
-      el('div.list', {},
-        el('h3', { text: L('Pampalamig (dagdag na Tropa)', 'Drinks & snacks (bonus Tropa)') }),
-        ...SHOP.filter((x) => x.kind === 'treat').map(row),
-        el('h3', { text: L('Tsinelas', 'Flip-flops (tsinelas)') }),
-        ...SHOP.filter((x) => x.kind === 'slipper').map(row),
-        el('h3', { text: L('Titulo (makikita ng tropa sa lobby)', 'Titles (your friends see them in the lobby)') }),
-        ...SHOP.filter((x) => x.kind === 'title').map(row),
-        d.title
-          ? this.button(L('Ranggo na lang ang ipakita', 'Show my rank instead'), '.alt.small', () => {
-              d.title = '';
-              after();
-            })
-          : null,
-        el('p.hint', { text: L(
-          'Barya: kinikita sa bawat laro, badge, gawain at karibal. Hindi bumababa ang ranggo mo kapag gumastos.',
-          'Barya (coins) come from every game, badge, quest and rival. Spending them never lowers your rank.',
-        ) }),
-      ),
-      el('div.btns', {}, this.button(L('Paalam!', 'Bye!'), '', back)),
+    const say = this.storeNote || (greet ? lines[Math.floor(Math.random() * lines.length)] : L('Salamat! Balik ka ha.', 'Thank you! Come back soon.'));
+    this.storeNote = '';
+    const close = el('button.icon-btn.close', { text: '✕', attrs: { 'aria-label': L('Isara', 'Close') } });
+    onTap(close, () => {
+      this.cb.onUiSound();
+      back();
+    });
+    const tabs: [typeof this.storeTab, string][] = [
+      ['treat', L('Pampalamig', 'Drinks')],
+      ['slipper', L('Tsinelas', 'Flip-flops')],
+      ['title', L('Titulo', 'Titles')],
+    ];
+    const tabRow = el('div.seg.tabs', {}, ...tabs.map(([id, label]) => {
+      const b = el((id === this.storeTab ? 'button.on' : 'button') as 'button', { text: label });
+      onTap(b, () => {
+        this.cb.onUiSound();
+        this.storeTab = id;
+        this.showStore(back, false);
+      });
+      return b;
+    }));
+    const head = el('div.store-head', {},
+      el('div.store-top', {}, el('h2', { text: L('Sari-sari Store', 'Sari-sari Store') }), close),
+      el('p.tindera', { text: `Aling Nena: "${say}"` }),
+      el('div.wallet-row', {},
+        el('span.wallet-pill', {}, el('i.coin'), document.createTextNode(`${d.barya} Barya`)),
+        d.boost > 0 ? el('span.wallet-pill.boost', { text: L(`Boost: ${d.boost} laro pa`, `Boost: ${d.boost} game${d.boost === 1 ? '' : 's'} left`) }) : null),
+      tabRow,
     );
-    this.open('store', card);
+
+    const help: Record<typeof this.storeTab, string> = {
+      treat: L(`Dagdag x${TREAT_MULT} Tropa Points sa susunod mong mga laro. Nagsasama-sama ang boost.`, `Earn x${TREAT_MULT} Tropa Points in your next games. Boosts stack up.`),
+      slipper: L('Makikita sa kamay mo at sa ibinabato mong tsinelas. May iba pang kulay na nakukuha sa ranggo (Settings).', 'Shows in your hand and on every throw. More colors unlock with your rank (in Settings).'),
+      title: L('Makikita ng tropa mo sa ilalim ng pangalan mo sa lobby.', 'Your friends see it under your name in multiplayer.'),
+    };
+    const items = SHOP.filter((x) => x.kind === this.storeTab);
+    const body = el('div.store-body', {},
+      el('p.hint', { text: help[this.storeTab] }),
+      el('div.store-grid', {}, ...items.map(card)),
+      this.storeTab === 'title' && d.title
+        ? this.button(L('Ranggo na lang ang ipakita', 'Show my rank instead'), '.alt.small', () => {
+            d.title = '';
+            after(L('Ranggo mo na ang ipinapakita.', 'Showing your rank again.'));
+          })
+        : null,
+      el('p.hint', { text: L('Barya: kinikita sa bawat laro, badge, gawain at karibal. Hindi bumababa ang ranggo mo kapag gumastos.', 'Barya (coins) come from games, badges, quests and rivals. Spending never lowers your rank.') }),
+    );
+    this.open('store', el('div.card.store', {}, head, body));
+    this.setKeys((e) => {
+      if (e.key === 'Escape') back();
+    });
   }
 
   // --------------------------------------------------------------- libro (quests, badges, records)
@@ -470,14 +524,14 @@ export class Menus {
       });
       return b;
     }));
-    const wallet = el('div.wallet', { text: `${d.barya} Barya  ·  ${d.tropaPoints} Tropa  ·  ${RANKS[rankIndex(d.tropaPoints)].name}` });
+    const wallet = el('div.wallet', { text: `${d.barya} Barya  ·  ${d.tropaPoints} Tropa Points  ·  ${RANKS[rankIndex(d.tropaPoints)].name}` });
     let body: HTMLElement;
 
     if (tab === 'hamon') {
       body = el('div.list', {},
         el('div.item' + (info.daily.done ? '.done' : '') as 'div', {},
           el('b', { text: L('Hamon ng Araw', 'Daily Challenge') }),
-          el('span', { text: info.daily.done ? L('Tapos na! Balik bukas.', 'Done! Come back tomorrow.') : L(`${info.daily.name}: ${info.daily.target}+ puntos  ·  +${info.daily.reward} Tropa`, `${info.daily.name}: score ${info.daily.target}+  ·  +${info.daily.reward} Tropa`) }),
+          el('span', { text: info.daily.done ? L('Tapos na! Balik bukas.', 'Done! Come back tomorrow.') : L(`${info.daily.name}: ${info.daily.target}+ puntos  ·  +${info.daily.reward} Tropa Points`, `${info.daily.name}: score ${info.daily.target}+  ·  +${info.daily.reward} Tropa Points`) }),
           el('small', { text: info.daily.streak > 0 ? L(`${info.daily.streak} araw sunod-sunod`, `${info.daily.streak}-day streak`) : L('Simulan ang streak mo!', 'Start your streak today!') })),
         el('h3', { text: L('Gawain ngayon', "Today's quests") }),
         ...info.quests.map((q, i) => {
