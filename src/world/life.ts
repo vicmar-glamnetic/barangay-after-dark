@@ -80,7 +80,8 @@ export class BarangayLife {
       canvas.height = 160;
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
-      const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, fog: false, transparent: true }));
+      // dimmed (like the game labels) so the night glow/bloom never washes the text out
+      const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xb4b4b4, depthWrite: false, fog: false, transparent: true, toneMapped: false }));
       bubble.scale.set(2.0, 0.625, 1);
       bubble.center.set(0.5, 0);
       bubble.position.set(x, 2.25, z);
@@ -241,7 +242,7 @@ export class BarangayLife {
     const g = ti.canvas.getContext('2d')!;
     const W = ti.canvas.width, H = ti.canvas.height;
     g.clearRect(0, 0, W, H);
-    g.font = `700 30px ${FONT}`;
+    g.font = `800 33px ${FONT}`;
     // wrap into at most two lines
     const words = text.split(' ');
     const lines: string[] = [''];
@@ -251,9 +252,11 @@ export class BarangayLife {
       else lines[lines.length - 1] = tryLine;
     }
     const bw = Math.min(W - 8, Math.max(...lines.map((l) => g.measureText(l).width)) + 44);
-    const bh = lines.length * 36 + 26;
+    const bh = lines.length * 38 + 26;
     const x = (W - bw) / 2, y = H - bh - 26;
-    g.fillStyle = 'rgba(255,255,255,0.95)';
+    g.fillStyle = '#efe6cf'; // paper, not pure white
+    g.strokeStyle = '#1a1230';
+    g.lineWidth = 4;
     g.beginPath();
     if (g.roundRect) g.roundRect(x, y, bw, bh, 22);
     else g.rect(x, y, bw, bh);
@@ -261,10 +264,11 @@ export class BarangayLife {
     g.lineTo(W / 2, H - 4);
     g.lineTo(W / 2 + 14, y + bh);
     g.fill();
-    g.fillStyle = '#1a1230';
+    g.stroke();
+    g.fillStyle = '#120c24';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    lines.forEach((l, i) => g.fillText(l, W / 2, y + 13 + 18 + i * 36, W - 40));
+    lines.forEach((l, i) => g.fillText(l, W / 2, y + 13 + 19 + i * 38, W - 40));
     ti.tex.needsUpdate = true;
     ti.bubble.visible = true;
   }
